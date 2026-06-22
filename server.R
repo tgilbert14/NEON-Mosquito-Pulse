@@ -232,12 +232,12 @@ server <- function(input, output, session) {
       ifelse(brd$reliable, "", "<br/><span class='smt-pin-rar' style='color:#ffd9a7'>⚠ few nights</span>"),
       "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", brd$scientificName, "'>\U0001F9EC Open species profile &rarr;</span>",
       "<br/><em class='smt-pin-hint'>Tap the dot to pin this card</em>")
-    qcol <- if (is_dark()) "#9b91c0" else "#a99fce"; muted <- if (is_dark()) "#9b91c0" else "#6f6790"
+    qcol <- if (is_dark()) "#a99fce" else "#7e72a8"; muted <- if (is_dark()) "#9b91c0" else "#6f6790"
     p <- plot_ly()
     for (g in unique(brd$genus)) { sub <- brd[brd$genus %in% g, ]
       p <- p %>% add_trace(data=sub, x=~ubiquity, y=~index, type="scatter", mode="markers", name=g %||% "—",
         customdata=~tip, marker=list(color=sub$col, size=12, opacity=0.82, line=list(color="#fff", width=0.5)),
-        text=~paste0(vernacular %||% scientificName), hovertemplate="%{text}<br>%{x}% of nights · %{y:.2f}/trap-night<extra></extra>") }
+        text=~scientificName, hovertemplate="<b>%{text}</b><br>%{x}% of nights · %{y:.2f}/trap-night<extra></extra>") }
     mx <- stats::median(brd$ubiquity); my <- stats::median(brd$index[brd$reliable])
     xr <- range(brd$ubiquity); yr <- range(brd$index); px <- diff(xr)*0.02; py <- diff(yr)*0.02
     qlab <- function(x,y,t,xa,ya) list(text=t, x=x, y=y, xref="x", yref="y", showarrow=FALSE, xanchor=xa, yanchor=ya, font=list(color=qcol, size=10.5))
@@ -373,13 +373,14 @@ server <- function(input, output, session) {
     g <- point_summary(obs, traps); g <- g[is.finite(g$lat) & is.finite(g$lng), ]
     metric <- input$mapMetric %||% "richness"; val <- g[[metric]]; val[is.na(val)] <- 0
     dom <- if (diff(range(val,na.rm=TRUE))>0) range(val,na.rm=TRUE) else c(val[1]-1,val[1]+1)
-    pal <- leaflet::colorNumeric(c("#efe7ff","#b8f24a","#7c52e0","#3a1f7a"), domain=dom)
-    rr <- range(g$richness, na.rm=TRUE); g$radius <- if (diff(rr)>0) 7 + 13*(g$richness-rr[1])/diff(rr) else 11
+    # visible violet ramp (never near-white) so low-metric markers still read on a light basemap
+    pal <- leaflet::colorNumeric(c("#cdb6ff","#9d7bff","#7c52e0","#4226a0"), domain=dom)
+    rr <- range(g$richness, na.rm=TRUE); g$radius <- if (diff(rr)>0) 9 + 13*(g$richness-rr[1])/diff(rr) else 12
     leaflet::leaflet(g) %>% leaflet::addProviderTiles(input$view %||% "Esri.WorldTopoMap") %>%
-      leaflet::addCircleMarkers(lng=~lng, lat=~lat, radius=~radius, fillColor=pal(val), color="#fff", weight=1, fillOpacity=0.85,
+      leaflet::addCircleMarkers(lng=~lng, lat=~lat, radius=~radius, fillColor=pal(val), color="#2a2342", weight=1.5, fillOpacity=0.9,
         layerId=~plotID,
-        label=~lapply(sprintf("<b>%s</b><br>%d species · %s / trap-night<br><span style='color:#7c52e0'>\U0001F446 click for the species list</span>", short_point(plotID), richness, ifelse(is.na(per_tn),"—",per_tn)), htmltools::HTML)) %>%
-      leaflet::addLegend("bottomright", pal=pal, values=val, title=if (metric=="richness") "species" else "/ trap-night")
+        label=~lapply(sprintf("<div style='font-family:Rubik,sans-serif'><b>%s</b> · %d species · %s / trap-night<br><span style='color:#7c52e0;font-weight:700'>\U0001F446 click for the species list</span></div>", short_point(plotID), richness, ifelse(is.na(per_tn),"—",per_tn)), htmltools::HTML)) %>%
+      leaflet::addLegend("bottomright", pal=pal, values=val, title=if (metric=="richness") "species" else "per trap-night", opacity=0.9)
   })
   observeEvent(input$map_marker_click, { id <- input$map_marker_click$id; if (!is.null(id)) rv$grid <- id })
   output$gridPanel <- renderUI({

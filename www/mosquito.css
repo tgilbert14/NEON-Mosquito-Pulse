@@ -236,17 +236,39 @@ body {
 [data-bs-theme="dark"] .qc-flag-ok   { background: #1d3216; color: #b8e89a; }
 [data-bs-theme="dark"] .qc-inspector { background: rgba(255,255,255,0.03); }
 
-/* ---- home-nav buttons (Overview shortcuts) ------------------------------- */
+/* ---- home-nav buttons (Overview shortcuts) ------------------------------- *
+ * styles.css forces .home-btn text to #fff !important (built for the mammal
+ * app's DARK cards). This theme's cards are LIGHT, so the default state needs
+ * dark text (title in violet); the hover/focus state inverts to the dark-purple
+ * command-band card with white text (the "outline in purple, invert on hover"
+ * look). Every rule needs !important to beat styles.css:804.                  */
 .home-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 4px 0 14px; }
 .home-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
-  background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--violet); border-radius: 12px;
-  padding: 12px 14px; color: var(--ink); box-shadow: 0 3px 12px var(--shadow); transition: transform .14s, box-shadow .14s; }
-.home-btn:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -10px var(--shadow); }
-.home-btn > div:first-of-type { font-weight: 800; font-size: 15px; }
-.home-btn small { color: var(--muted); font-size: 11.5px; }
-.home-btn .bi { color: var(--violet); font-size: 17px; }
+  background: var(--paper) !important; border: 1px solid var(--line); border-top: 3px solid var(--violet); border-radius: 12px;
+  padding: 12px 14px; box-shadow: 0 3px 12px var(--shadow); transition: transform .14s, box-shadow .14s, background .14s; }
+/* shiny actionButton wraps its content in span.action-label, so the title is
+   .home-btn .action-label > div (NOT .home-btn > div). Target that. */
+/* DEFAULT (light card): everything ink, then the TITLE in violet, subtitle muted */
+.home-btn, .home-btn .action-label, .home-btn .action-label * { color: var(--ink) !important; }
+.home-btn .action-label > div { font-weight: 800; font-size: 15px; color: var(--violet) !important; }
+.home-btn .action-label small { color: var(--muted) !important; font-size: 11.5px; font-weight: 400; }
+.home-btn .bi { color: var(--violet) !important; font-size: 17px; margin-bottom: 4px; }
 .home-btn-star { border-top-color: var(--lime); }
-.home-btn-star .bi { color: var(--lime-ink); }
+.home-btn-star .action-label > div { color: var(--lime-ink) !important; }
+.home-btn-star .bi { color: var(--lime-ink) !important; }
+/* HOVER / FOCUS / ACTIVE: invert to the dark-purple command-band, white text */
+.home-btn:hover, .home-btn:focus, .home-btn:focus-visible, .home-btn.active {
+  background: linear-gradient(180deg, #2a2150 0%, #1c1538 100%) !important;
+  transform: translateY(-3px); box-shadow: 0 14px 26px -10px rgba(10,6,24,.55); border-color: var(--violet); }
+.home-btn:hover .action-label, .home-btn:hover .action-label *,
+.home-btn:focus .action-label, .home-btn:focus .action-label *,
+.home-btn.active .action-label, .home-btn.active .action-label * { color: #fff !important; }
+.home-btn:hover .action-label > div, .home-btn:focus .action-label > div, .home-btn.active .action-label > div { color: #cdff6e !important; }
+.home-btn:hover .action-label small, .home-btn:focus .action-label small, .home-btn.active .action-label small { color: #c3b8e0 !important; }
+.home-btn:hover .bi, .home-btn:focus .bi, .home-btn.active .bi { color: #d6ff7a !important; }
+[data-bs-theme="dark"] .home-btn { background: var(--paper) !important; }
+[data-bs-theme="dark"] .home-btn .action-label, [data-bs-theme="dark"] .home-btn .action-label * { color: var(--ink) !important; }
+[data-bs-theme="dark"] .home-btn .action-label > div { color: #c2a9ff !important; }
 
 /* ---- DDL footer ----------------------------------------------------------- */
 .ddl-footer { margin-top: 22px; padding: 18px 4px 30px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
