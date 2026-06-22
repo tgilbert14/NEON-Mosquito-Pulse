@@ -12,20 +12,20 @@ https://tgilbert14.github.io/NEON-Mosquito-Pulse/
 
 `docs/.nojekyll` is present so Pages serves the folder as-is.
 
-### Set the app URL after the first app deploy
+### The app URL (set)
 
-The cover currently points its launch button + constellation core at a placeholder:
+The cover's launch button + constellation core point at the live Connect Cloud app:
 
 ```
-https://mosquito-pulse.share.connect.posit.cloud/
+https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/
 ```
 
-After the app is published (step 2), copy its real Connect share URL and replace the placeholder in **three places** in `docs/index.html`:
+If you ever redeploy to a new share URL, replace it in **three places** in `docs/index.html` plus the README badge:
 1. `var APP_URL = "…"` (top of the first `<script>`)
 2. the `.launch` anchor `href`
 3. the `.ccore` anchor `href`
 
-…and the README badge. (Every sibling's real URL looks like `https://019e….share.connect.posit.cloud/`.)
+(Every sibling's URL looks like `https://019e….share.connect.posit.cloud/`.)
 
 ## 2. The app (Posit Connect Cloud)
 
