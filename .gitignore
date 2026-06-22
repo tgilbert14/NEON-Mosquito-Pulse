@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.neon_token
+../mosquito-data-fetch/
+*.Rproj.bak
+.vs/
+.vscode/

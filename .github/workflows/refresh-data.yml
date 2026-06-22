@@ -1,0 +1,121 @@
+name: Refresh NEON data bundle
+
+# Keeps the bundled "database" current and lets Posit Connect Cloud auto-redeploy.
+# Connect Cloud watches this repo and re-publishes on every push to `master`.
+#
+# CADENCE — tuned to how the mosquito product updates:
+#   • MONTHLY (first Saturday night, Arizona time): a light ENV top-up
+#     (precip/temperature, last ~14 months) + a rebuild of the climate + cross-
+#     site precompute. Fast and low-risk; it never drops sites.
+#   • ON DEMAND: the full 47-site mosquito re-pull (DP1.10043.001). Mosquito
+#     collections publish on a lag, so a monthly re-pull is wasteful; tick
+#     `refetch_mosquitoes` in the Actions tab when NEON publishes a new season.
+#
+# REQUIRES one optional repo secret (Settings → Secrets and variables → Actions):
+#   NEON_TOKEN   a free NEON API token (raises the anonymous rate limit).
+
+on:
+  schedule:
+    # Every Sunday 06:00 UTC == Saturday 23:00 America/Phoenix (Arizona, no DST).
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+    inputs:
+      refetch_mosquitoes:
+        description: "Also re-pull all 47 mosquito sites (DP1.10043.001) — slow, do this when NEON publishes a new season"
+        type: boolean
+        default: false
+      skip_download:
+        description: "Skip the environmental re-pull; just rebuild the precompute from committed bundles and redeploy (fast test)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run — proceeding."; echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          dow=$(TZ='America/Phoenix' date +%u)    # 6 = Saturday
+          day=$(TZ='America/Phoenix' date +%-d)
+          if [ "$dow" = "6" ] && [ "$day" -le 7 ]; then
+            echo "First Saturday in Arizona (day $day) — proceeding."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not the first Saturday (dow=$dow day=$day) — skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  refresh:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    env:
+      NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Install R packages
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: >
+            neonUtilities, dplyr, tibble, tidyr, stringr, rsconnect,
+            shiny, bslib, bsicons, plotly, leaflet, DT, shinyjs,
+            shinycssloaders, RColorBrewer, htmltools, cpp11
+
+      # Heavy, ON-DEMAND: re-pull all 47 mosquito sites and re-bundle. Guarded so a
+      # partial pull can't silently shrink the app — only re-bundles when ≥30 sites
+      # were fetched (mosquitoes are absent at some cold/dry sites, so the floor is
+      # lower than the bird app's 40).
+      - name: Re-pull mosquito sites (on demand)
+        if: ${{ github.event.inputs.refetch_mosquitoes == 'true' }}
+        timeout-minutes: 240
+        run: |
+          Rscript scripts/fetch_mos_all.R
+          n=$(ls ../mosquito-data-fetch/*_raw.rds 2>/dev/null | wc -l)
+          echo "fetched $n raw site files"
+          if [ "$n" -ge 30 ]; then
+            Rscript scripts/bundle_mos_data.R
+          else
+            echo "Only $n sites fetched (<30) — keeping the committed bundles, skipping re-bundle."
+          fi
+
+      # MONTHLY: light environmental top-up (re-pull only recent months of
+      # precip/temperature and merge into the committed history). Non-fatal.
+      - name: Top up the environmental overlays (recent months)
+        if: ${{ github.event.inputs.skip_download != 'true' }}
+        continue-on-error: true
+        timeout-minutes: 50
+        env:
+          MOS_ENV_RECENT_MONTHS: "14"
+        run: |
+          if [ -f scripts/refresh_env_data.R ]; then Rscript scripts/refresh_env_data.R; else echo "no refresh_env_data.R — skipping"; fi
+
+      # Rebuild the precompute tables the app loads at boot (climate + cross-site).
+      - name: Rebuild cross-site precompute
+        run: Rscript scripts/build_cross_site.R
+
+      # Push the refreshed data straight to master -> Connect Cloud re-publishes.
+      - name: Commit & push refreshed data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/sites data/env data/site_index.rds data/site_climate.rds data/site_month_clim.rds data/cross_site.rds data-sample 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No data changes — nothing to push."
+          else
+            git commit -m "data: monthly NEON refresh (env top-up + cross-site precompute)"
+            git push origin HEAD:master
+            echo "Pushed refreshed data — Connect Cloud will re-publish."
+          fi
