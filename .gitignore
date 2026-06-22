@@ -7,3 +7,8 @@
 *.Rproj.bak
 .vs/
 .vscode/
+
+# review-agent scratch
+_*.R
+_adv_check*.R
+_verify_*.R
