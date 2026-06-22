@@ -8,19 +8,21 @@ CO2 light traps run a dusk-to-dawn bout at fixed plots. Dry ice (CO2) mimics a b
 
 Three tables, joined from the trap outward:
 
-| Table | One row = | Key fields |
+| Table | One row = | Key fields (the REAL DP1.10043.001 schema) |
 |---|---|---|
-| `mos_trapping` | one trap deployment (one trap-night) | `sampleID`, `plotID`, `trapID`, `collectDate`, **`trapHours`**, `nightOrDay`, `targetTaxaPresent`, `sampleCondition` |
-| `mos_sorting` | one weighed subsample | `subsampleID`, `sampleID`, `subsampleWeight`, `totalWeight`, `sampleType` (bycatch flag) |
-| `mos_expertTaxonomistIDProcessed` | one (subsample × species × sex) tally | `subsampleID`, `scientificName`, `taxonRank`, `sex`, **`individualCount`** |
+| `mos_trapping` | one trap deployment (one trap-night) | `sampleID`, `plotID` (no `trapID` — one trap per plot), `setDate`, `collectDate`, **`trapHours`**, `nightOrDay`, `targetTaxaPresent`, `sampleCondition`, `decimalLatitude/Longitude` |
+| `mos_sorting` | one sorted subsample | `subsampleID`, `sampleID`, **`proportionIdentified`** (the fraction identified — NOT weights), `sampleCondition` |
+| `mos_expertTaxonomistIDProcessed` | one (subsample × species × sex) tally | `subsampleID`, `family`, `genus`, `scientificName`, `taxonRank`, `sex`, **`individualCount`**, `identificationQualifier` |
 
-**Join LEFT from `mos_trapping`** so zero-catch trap-nights (`targetTaxaPresent = "N"`, no children) survive as effort, not silently dropped.
+There are **no** `subsampleWeight`/`totalWeight`/`sampleType`/`trapID` columns in the live product — the bundler uses what is actually there. The expert-ID table is Culicidae-only, so all rows are target mosquitoes (`is_target` via `family`); bycatch is not carried.
+
+**Effort keeps the zeros.** Zero-catch trap-nights (`targetTaxaPresent = "N"`) carry NA `sampleID`, so the effort frame is keyed on the trap-night identity (`plotID` + `collectDate`), NOT on `sampleID` — otherwise all the zero-catch nights collapse and the denominator is wrong. The pulse, hero index, and ubiquity all divide by this same deployment-level effort.
 
 ## The honest unit
 
 ```
-estimatedTotalCount = individualCount × (totalWeight / subsampleWeight)   # scale subsample to whole trap
-activity index       = Σ estimatedTotalCount / trap-nights                # trap-nights = Σ trapHours / 24
+estimatedTotalCount = individualCount / proportionIdentified   # scale the identified fraction to the whole trap
+activity index       = Σ estimatedTotalCount / trap-nights      # trap-nights = Σ trapHours / 24, over ALL deployments
 ```
 
 **Mosquitoes per trap-night** is a **within-site activity index, not a population.** It is the analogue of the bird app's "birds per count." Round only at display; never round the continuous expansion per-record before summing.

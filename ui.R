@@ -105,7 +105,7 @@ ui <- bslib::page_sidebar(
         card(full_screen = TRUE,
           card_head("activity", "Activity index by week, against the rains",
             info_pop("Reading the pulse",
-              p("The line is the ", tags$b("activity index"), " (mosquitoes per trap-night) by week of the year, averaged across all sampled years; the band is ±1 SE between years. The ", tags$span(style="color:#5f9e12;font-weight:700","green shading"), " is the site's monsoon window, from its precipitation climatology."),
+              p("The line is the ", tags$b("median activity index"), " (mosquitoes per trap-night) by week of the year across all sampled years (the median, not the mean, because mosquito catch is wildly skewed and one fluke year shouldn't define the peak); the band is the ", tags$b("middle 50% of years"), " (the inter-quartile spread). The ", tags$span(style="color:#5f9e12;font-weight:700","green shading"), ", where shown, is the site's summer-rain / monsoon window from its precipitation climatology (drawn only at sites with a real NEON gauge and a summer rain peak)."),
               p("Weeks with no trapping are gaps, not zeros. The pulse following the rains is the pattern this app is built to show, ", tags$b("correlational"), ", within this one site. Rainfall is shown only where a NEON gauge exists."))),
           uiOutput("pulseInsight"),
           spin(plotlyOutput("pulsePlot", height = "400px"))),

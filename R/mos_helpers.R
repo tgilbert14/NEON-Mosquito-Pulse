@@ -36,8 +36,9 @@ num <- function(x) suppressWarnings(as.numeric(x))
 # ---------------------------------------------------------------------------
 vector_board <- function(obs, n_occ = NULL, trap_nights = NULL) {
   sp <- target_only(species_level_only(obs)); if (is.null(sp) || !nrow(sp)) return(NULL)
-  tn <- max(1, num(trap_nights %||% dplyr::n_distinct(obs$sampleID)))
-  n_occ <- max(1L, as.integer(n_occ %||% dplyr::n_distinct(obs$sampleID)))
+  sp$.occ <- collection_occasion(sp)   # the trap-night occasion (occ_id), not sampleID
+  tn <- max(1, num(trap_nights %||% dplyr::n_distinct(sp$.occ)))
+  n_occ <- max(1L, as.integer(n_occ %||% dplyr::n_distinct(collection_occasion(obs))))
   sp$.cnt <- num(sp$count)
   sp %>% dplyr::group_by(.data$scientificName) %>%
     dplyr::summarise(
@@ -45,7 +46,7 @@ vector_board <- function(obs, n_occ = NULL, trap_nights = NULL) {
       genus = mode_chr(.data$genus),
       detections = dplyr::n(),
       total = sum(.data$.cnt, na.rm = TRUE),
-      n_occ_present = dplyr::n_distinct(.data$sampleID),
+      n_occ_present = dplyr::n_distinct(.data$.occ),
       n_traps = dplyr::n_distinct(.data$trapkey),
       female = sum(.data$.cnt[toupper(substr(.data$sex,1,1)) == "F"], na.rm = TRUE),
       male   = sum(.data$.cnt[toupper(substr(.data$sex,1,1)) == "M"], na.rm = TRUE),
@@ -133,7 +134,9 @@ sex_split <- function(obs, sci = NULL) {
 # collection), the mosquito analogue of the bird point x year occasion.
 # Chao2 (Chao 1987; Colwell et al. 2012). Genus-only IDs excluded from richness.
 # ---------------------------------------------------------------------------
-collection_occasion <- function(sp) as.character(sp$sampleID)
+# the sampling occasion = a TRAP-NIGHT (occ_id = plotID+collectDate), which the
+# bundler builds to include zero-catch nights. Falls back to sampleID for old bundles.
+collection_occasion <- function(sp) if ("occ_id" %in% names(sp)) as.character(sp$occ_id) else as.character(sp$sampleID)
 # n_occ = total ATTEMPTED collection occasions (incl. zero-catch); the honest T for
 # incidence Chao2. Falls back to caught-occasion count if not supplied.
 chao2_collections <- function(obs, n_occ = NULL) {
@@ -155,17 +158,23 @@ chao2_collections <- function(obs, n_occ = NULL) {
   list(S_obs = S, chao2 = round(chao, 1), m = m, Q1 = Q1, Q2 = Q2, unstable = Q2 < 3,
        ci_lo = round(ci_lo, 1), ci_hi = round(ci_hi, 1))
 }
-# species accumulation over collection occasions (deterministic permutation mean)
+# species accumulation over collection occasions (deterministic permutation mean).
+# Vectorized O(perms*n): per permutation, each species' first-occurrence rank =
+# min position over its occasions, then the richness curve = cumsum of how many
+# species are first seen at each position. (The old growing-vector union loop was
+# O(perms*k^2) — ~6s on the biggest real sites; this is ~60-86x faster.)
 mos_accum <- function(obs, traps = NULL, perms = 40) {
   sp <- target_only(species_level_only(obs)); if (is.null(sp) || !nrow(sp)) return(NULL)
-  byp <- split(sp$scientificName, collection_occasion(sp)); k <- length(byp); if (k < 2) return(NULL)
-  mat <- vapply(1:perms, function(s) {
-    ord <- byp[order((seq_len(k) * 7919 + s * 104729) %% k)]
-    seen <- character(0); out <- integer(k)
-    for (i in seq_len(k)) { seen <- union(seen, ord[[i]]); out[i] <- length(seen) }
-    out
-  }, numeric(k))
-  data.frame(occasions = seq_len(k), richness = round(rowMeans(mat), 1))
+  occ_id <- as.integer(factor(collection_occasion(sp))); k <- max(occ_id); if (k < 2) return(NULL)
+  spv <- sp$scientificName
+  acc <- numeric(k)
+  for (s in 1:perms) {
+    ord <- order((seq_len(k) * 7919L + s * 104729L) %% k)   # deterministic random-ish occasion order
+    rank_of <- integer(k); rank_of[ord] <- seq_len(k)        # occasion -> its position in this order
+    first <- tapply(rank_of[occ_id], spv, min)               # each species' first-appearance position
+    acc <- acc + cumsum(tabulate(as.integer(first), nbins = k))
+  }
+  data.frame(occasions = seq_len(k), richness = round(acc / perms, 1))
 }
 
 # cross-site effort standardization (dependency-light; reused by build_cross_site.R)
@@ -279,9 +288,12 @@ mos_qc <- function(obs, sci, traps = NULL) {
   # 6 — uncertain identification (excluded from richness, kept in the total index)
   add("info", "Uncertain identification", "uncertain", which((nzchar(iq)) | (("taxonRank" %in% names(d)) & !(d$taxonRank %in% c("species","subspecies")))),
       "An identification qualifier (for example 'cf.' or 'near') or a coarser-than-species rank is recorded. These are excluded from richness but kept in the total activity index.")
-  # 7 — day bout mixed in (CO2-trap mosquito activity is nocturnal/crepuscular)
-  add("warn", "Daytime trap bout", "daybout", which(nd %in% "day"),
-      "These came from a daytime trap set. CO2-trap mosquito activity is mostly at night and dusk, so day bouts dilute the activity index and the seasonal pulse. The index defaults to night bouts; these are surfaced for review.")
+  # 7 — daytime interval (a STANDARD half of a NEON bout, not an error). Per the
+  # TOS protocol (NEON.DOC.014049) a bout = one night interval + the following day
+  # interval, so day collections are legitimate and ARE included in the index +
+  # denominator alongside night collections. This is an INFO note, not a warning.
+  add("info", "Daytime trap interval", "daybout", which(nd %in% "day"),
+      "Collected on the daytime half of a NEON bout (a bout is one night interval plus the following day interval). Day collections are standard and are counted in the activity index and its denominator, the same as night collections. Listed only so you can see the night/day split.")
   out
 }
 mos_qc_report <- function(obs, sci, traps = NULL) {
@@ -293,7 +305,7 @@ mos_qc_report <- function(obs, sci, traps = NULL) {
 # Machine-readable column codebook for the CSV downloads (FAIR data dictionary).
 # ---------------------------------------------------------------------------
 mos_codebook <- function() {
-  data.frame(
+  base <- data.frame(
     column = c("scientificName","vernacularName","genus","sampleID","trapkey","plotID","trapID","year","collectDate",
                "sex","count","is_target","nightOrDay","trapHours","proportionIdentified","expansionFactor",
                "targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode",
@@ -314,7 +326,7 @@ mos_codebook <- function() {
       "Sex of the individuals. CO2 traps catch overwhelmingly host-seeking FEMALES by design; a near-all-female catch is the trap working, not a population fact. U = undetermined.",
       "ESTIMATED number of mosquitoes = identified count scaled to the whole trap by 1 / proportionIdentified. Continuous; rounded only at display.",
       "TRUE if a target mosquito (family Culicidae). The expert-ID table is Culicidae only, so this is effectively all rows; bycatch is not carried in this product.",
-      "Whether the trap bout ran at night (default for the index) or day.",
+      "Night or day interval. A NEON bout is one night interval plus the following day interval; BOTH are standard and both are counted in the activity index and its denominator.",
       "Trap deployment duration in hours; trapHours/24 = trap-nights, the effort denominator. NA/0 = no usable effort, dropped from the denominator (not a zero catch).",
       "Fraction of the trap's catch that NEON identified (mos_sorting). The whole-trap count = individualCount / proportionIdentified.",
       "Subsample expansion factor (= 1 / proportionIdentified) applied to scale the identified count to the whole trap.",
@@ -333,4 +345,45 @@ mos_codebook <- function() {
       "Sample-coverage completeness, 0-1 (fraction of the community caught). Chao & Jost 2012.",
       "Species richness RAREFIED to a common number of collection occasions across sites (incidence rarefaction; Colwell et al. 2012)."),
     stringsAsFactors = FALSE)
+
+  # Columns that appear ONLY in the per-grid species CSV (map click) and the
+  # Across-the-continent cross-site CSV — documented here so every download is
+  # self-describing.
+  grid <- data.frame(
+    column = c("vernacular","detections","mosquitoes"),
+    units  = c("", "# trap-nights", "# mosquitoes (est.)"),
+    description = c(
+      "Grid CSV: common name where one exists (same as vernacularName; named `vernacular` in the per-grid export).",
+      "Grid CSV: number of collection occasions (trap-nights) at this grid where the species was caught.",
+      "Grid CSV / yearly card: ESTIMATED whole-trap-scaled mosquito count summed for the species (same scaling as `count`)."),
+    stringsAsFactors = FALSE)
+
+  cross <- data.frame(
+    column = c("site","name","state","biome_lab","warm_temp_c","mat_c","monsoon_precip_mm","precip_annual_mm",
+               "has_gauge","collections","taxa","t_used","hill_q1","hill_q2","mean_ubiquity","pct_culex",
+               "top_taxon","top_genus"),
+    units  = c("code","","","","°C","°C","mm","mm","logical","# occasions","# species","# occasions",
+               "effective # species","effective # species","% of occasions","% of catch","",""),
+    description = c(
+      "Cross-site CSV: NEON 4-letter site code.",
+      "Cross-site CSV: site name.",
+      "Cross-site CSV: US state.",
+      "Cross-site CSV: biome label (warm desert, cold desert, grassland, forest, ...).",
+      "Cross-site CSV: mean warm-season (summer) air temperature, the degree-day axis for cooler sites. From the env overlays; NA where no gauge.",
+      "Cross-site CSV: mean annual air temperature.",
+      "Cross-site CSV: total precipitation in the site's summer-monsoon window (the water-limited driver). NA where no gauge.",
+      "Cross-site CSV: total annual precipitation.",
+      "Cross-site CSV: TRUE if the site has a co-located NEON precipitation gauge; FALSE sites fall back to a climatology and cannot anchor a monsoon window.",
+      "Cross-site CSV: number of collection occasions (trap-nights with usable effort) the site's numbers are built on.",
+      "Cross-site CSV: number of mosquito species (taxa) observed at the site.",
+      "Cross-site CSV: the common occasion count that S_rare was rarefied DOWN to (the min across compared sites).",
+      "Cross-site CSV: Hill number q=1 (exp Shannon) — effective species count weighting by activity, common species emphasised.",
+      "Cross-site CSV: Hill number q=2 (inverse Simpson) — effective species count, dominant species emphasised.",
+      "Cross-site CSV: mean ubiquity across the site's species (% of occasions present, averaged).",
+      "Cross-site CSV: Culex (West Nile vector group) share of the site's whole-trap catch (same as culex_share).",
+      "Cross-site CSV: the most-active species at the site.",
+      "Cross-site CSV: the most-active genus at the site."),
+    stringsAsFactors = FALSE)
+
+  rbind(base, grid, cross)
 }

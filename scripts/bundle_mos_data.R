@@ -69,6 +69,9 @@ build_site <- function(site) {
     dplyr::transmute(
       sampleID, trapkey = .data$plotID, plotID = .data$plotID,
       trapID = sub("^[A-Z]{4}_", "", .data$plotID),
+      # occ_id = the trap-night occasion (plotID + collect date), the SAME key the
+      # effort frame uses, so the catch numerator and the effort denominator agree.
+      occ_id = paste(.data$plotID, as.Date(substr(as.character(.data$collectDate), 1, 10))),
       year = as.integer(substr(as.character(.data$collectDate), 1, 4)),
       collectDate = as.Date(substr(as.character(.data$collectDate), 1, 10)),
       week = as.integer(format(as.Date(substr(as.character(.data$collectDate), 1, 10)), "%U")),
@@ -94,20 +97,26 @@ build_site <- function(site) {
                      trap_nights = sum(ifelse(is.finite(.data$trapHours) & .data$trapHours > 0, .data$trapHours, 0), na.rm = TRUE) / 24,
                      n_collections = dplyr::n_distinct(.data$sampleID), .groups = "drop") %>%
     dplyr::mutate(trapkey = .data$plotID)
-  # ATTEMPTED collection occasions (one row per sampleID in the trapping table,
-  # INCLUDING zero-catch nights) -> the honest pulse / ubiquity denominator.
-  occ <- trap_ctx %>% dplyr::distinct(.data$sampleID, .keep_all = TRUE) %>%
-    dplyr::transmute(sampleID,
-                     year = as.integer(substr(as.character(.data$collectDate), 1, 4)),
-                     week = as.integer(format(.data$collectDate, "%U")),
-                     trap_nights = ifelse(is.finite(.data$trapHours) & .data$trapHours > 0, .data$trapHours / 24, 0))
-  effort_week <- occ %>% dplyr::filter(!is.na(.data$year), !is.na(.data$week)) %>%
+  # ONE shared deployment-level effort frame (the single-builder rule). Every
+  # trapping row is a real trap-night INCLUDING the zero-catch nights, which carry
+  # NA sampleID -> they MUST be keyed on the trap-night identity (plotID, collectDate),
+  # not on sampleID, or distinct(sampleID) collapses all ~3.8k of them into one row
+  # and the pulse denominator drops ~5x below the hero denominator (same "/trap-night"
+  # label, irreconcilable). effort_week, meta$trap_nights, and n_occ_attempted all
+  # derive from THIS frame, and obs$occ_id uses the same key, so the catch numerator
+  # and the effort denominator are on one consistent unit (a trap-night).
+  eff <- trap_ctx %>% dplyr::transmute(
+      occ_id = paste(.data$plotID, .data$collectDate),
+      year = as.integer(substr(as.character(.data$collectDate), 1, 4)),
+      week = as.integer(format(.data$collectDate, "%U")),
+      trap_nights = ifelse(is.finite(.data$trapHours) & .data$trapHours > 0, .data$trapHours / 24, 0))
+  effort_week <- eff %>% dplyr::filter(!is.na(.data$year), !is.na(.data$week)) %>%
     dplyr::group_by(.data$year, .data$week) %>%
     dplyr::summarise(trap_nights = sum(.data$trap_nights, na.rm = TRUE), .groups = "drop")
   meta <- list(site = site, lat = stats::median(traps$lat, na.rm = TRUE), lng = stats::median(traps$lng, na.rm = TRUE),
                years = sort(unique(obs$year)),
-               trap_nights = round(sum(traps$trap_nights, na.rm = TRUE), 1),
-               n_occ_attempted = dplyr::n_distinct(trap_ctx$sampleID), n_traps = nrow(traps))
+               trap_nights = round(sum(eff$trap_nights, na.rm = TRUE), 1),
+               n_occ_attempted = dplyr::n_distinct(eff$occ_id[eff$trap_nights > 0]), n_traps = nrow(traps))
   list(obs = obs, traps = traps, effort_week = effort_week, meta = meta)
 }
 

@@ -91,27 +91,24 @@ jobs:
             echo "Only $n sites fetched (<30) — keeping the committed bundles, skipping re-bundle."
           fi
 
-      # MONTHLY: light environmental top-up (re-pull only recent months of
-      # precip/temperature and merge into the committed history). Non-fatal.
-      - name: Top up the environmental overlays (recent months)
-        if: ${{ github.event.inputs.skip_download != 'true' }}
-        continue-on-error: true
-        timeout-minutes: 50
-        env:
-          MOS_ENV_RECENT_MONTHS: "14"
+      # Rebuild the precompute tables the app loads at boot, IN ORDER:
+      #   climate (site_climate.rds + site_month_clim.rds, from data/env/*.rds)
+      #   -> cross-site gradient (depends on the climate tables)
+      #   -> deploy manifest (must be regenerated or Connect serves a stale package set).
+      # The environmental overlays (data/env/*.rds) ship committed from the wider
+      # suite; there is no separate env re-pull here.
+      - name: Rebuild climate + cross-site precompute
         run: |
-          if [ -f scripts/refresh_env_data.R ]; then Rscript scripts/refresh_env_data.R; else echo "no refresh_env_data.R — skipping"; fi
-
-      # Rebuild the precompute tables the app loads at boot (climate + cross-site).
-      - name: Rebuild cross-site precompute
-        run: Rscript scripts/build_cross_site.R
+          Rscript scripts/build_climate.R
+          Rscript scripts/build_cross_site.R
+          Rscript scripts/write_manifest.R
 
       # Push the refreshed data straight to master -> Connect Cloud re-publishes.
       - name: Commit & push refreshed data
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/sites data/env data/site_index.rds data/site_climate.rds data/site_month_clim.rds data/cross_site.rds data-sample 2>/dev/null || true
+          git add data/sites data/env data/site_index.rds data/site_climate.rds data/site_month_clim.rds data/cross_site.rds manifest.json data-sample 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No data changes — nothing to push."
           else

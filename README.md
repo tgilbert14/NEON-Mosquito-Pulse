@@ -27,7 +27,7 @@ A national map of 46 NEON sites, then per site:
 
 - **Abundance is a within-site _activity index_** (mosquitoes per trap-night), never a population. A CO2 trap measures host-seeking effort.
 - **The catch is mostly female by design.** CO2 traps lure host-seeking females; a near-all-female catch is the method working, not a population sex ratio.
-- **Big catches are weight-scaled.** NEON identifies a weighed subsample of a huge night; the count is scaled up to the whole trap by the subsample weight ratio, then divided by trap-nights.
+- **Big catches are subsample-scaled.** NEON identifies a fixed fraction of a huge night; the count is scaled up to the whole trap by `1 / proportionIdentified`, then divided by trap-nights.
 - **Cross-site is space-for-time** — 46 different places watched at once, correlational, confounded by biome and latitude. Compare sites by direction, never by who has the higher raw catch.
 - **Culex activity is a heads-up, not a risk.** This product is _abundance_; whether a mosquito carries a virus is a separate NEON program. The app never translates a catch into disease risk.
 - **Every chart states how its number was made.**
@@ -56,9 +56,11 @@ Rscript scripts/build_synth_bundle.R
 Rscript scripts/fetch_mos_all.R
 # 2. bundle to per-site list(obs, traps, meta) + data/site_index.rds  (the single builder)
 Rscript scripts/bundle_mos_data.R
-# 3. precompute the cross-site gradient table
+# 3. build the climate tables from the env overlays (site_climate + site_month_clim)
+Rscript scripts/build_climate.R
+# 4. precompute the cross-site gradient table (reads the climate tables)
 Rscript scripts/build_cross_site.R
-# 4. regenerate the deploy manifest (or Connect serves a stale package set)
+# 5. regenerate the deploy manifest (or Connect serves a stale package set)
 Rscript scripts/write_manifest.R
 ```
 
@@ -66,6 +68,6 @@ Running the real pipeline overwrites the synthetic bundles; `meta$synthetic` dro
 
 ## Data product
 
-NEON [Mosquitoes sampled from CO2 traps (`DP1.10043.001`)](https://data.neonscience.org/data-products/DP1.10043.001). Tables joined: `mos_trapping` (effort / trap-nights), `mos_sorting` (subsample weights), `mos_expertTaxonomistIDProcessed` (the identified counts).
+NEON [Mosquitoes sampled from CO2 traps (`DP1.10043.001`)](https://data.neonscience.org/data-products/DP1.10043.001). Tables joined: `mos_trapping` (effort / trap-nights), `mos_sorting` (`proportionIdentified`, the subsample fraction), `mos_expertTaxonomistIDProcessed` (the identified counts, Culicidae-only).
 
 Data: National Ecological Observatory Network (operated by Battelle, funded by NSF). **Not affiliated with NEON, Battelle, or the NSF.** An educational data-exploration tool by [Desert Data Labs](https://desertdatalabs.com), Tucson, AZ.

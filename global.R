@@ -129,6 +129,20 @@ BIOME_LAB <- c(forest="Forest", grassland="Grassland / prairie", desert="Desert 
                tundra="Tundra / alpine", tropical="Tropical dry forest")
 biome_col <- function(b) { out <- unname(BIOME_COL[b]); ifelse(is.na(out), "#9aa6b2", out) }
 
+# Precip regime from the site's REAL climatology (data/site_climate.rds), NOT the
+# biome label — so the pulse band + prose don't call a winter-rain Great-Basin site
+# (ONAQ) or an Alaskan forest a "monsoon". Returns:
+#   "monsoon"     — a real summer-DOMINANT rain peak (>=40% of annual in the window)
+#   "summer_rain" — a warm-season rain bump, but not summer-dominant
+#   "none"        — no gauge, or no summer rain peak at all
+precip_regime <- function(cl) {
+  if (is.null(cl) || !nrow(cl) || !isTRUE(cl$has_gauge[1]) ||
+      !"monsoon_month_min" %in% names(cl) || is.na(cl$monsoon_month_min[1])) return("none")
+  sh <- if (!is.na(cl$monsoon_precip_mm[1]) && !is.na(cl$precip_annual_mm[1]) && cl$precip_annual_mm[1] > 0)
+          cl$monsoon_precip_mm[1] / cl$precip_annual_mm[1] else NA_real_
+  if (!is.na(sh) && sh >= 0.40) "monsoon" else "summer_rain"
+}
+
 # ---- precomputed climate / cross-site tables (built by scripts/, loaded once) -
 SITE_CLIMATE    <- tryCatch(readRDS("data/site_climate.rds"),    error = function(e) NULL)
 SITE_MONTH_CLIM <- tryCatch(readRDS("data/site_month_clim.rds"), error = function(e) NULL)

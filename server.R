@@ -141,18 +141,24 @@ server <- function(input, output, session) {
     for (i in seq_len(nrow(gs))) p <- p %>% add_trace(x = gs$share[i], y = "By genus", type="bar", orientation="h",
       name = gs$genus[i], legendgroup="g", marker=list(color=genus_col(gs$genus[i])),
       hovertemplate=sprintf("%s · %.1f%% of catch<extra></extra>", gs$genus[i], gs$share[i]))
+    # sex traces are NOT in the legend: the locked sex palette reuses two genus hues
+    # (Female=Aedes violet, Male=Anopheles cyan), so a shared legend collides. The
+    # per-segment hover + the fixed F/M/U stack order identify them instead.
     for (i in seq_len(nrow(sx))) { lab <- unname(sex_lab[sx$sex[i]])
       p <- p %>% add_trace(x = sx$share[i], y = "By sex", type="bar", orientation="h",
-        name = lab, legendgroup="s", marker=list(color=sex_col(sx$sex[i])),
-        hovertemplate=sprintf("%s · %.1f%% of sexed<extra></extra>", lab, sx$share[i])) }
+        name = lab, legendgroup="s", showlegend = FALSE, marker=list(color=sex_col(sx$sex[i])),
+        hovertemplate=sprintf("%s · %.1f%% of all catch<extra></extra>", lab, sx$share[i])) }
     p %>% plotly_theme() %>% plotly::layout(barmode="stack", showlegend=TRUE,
       xaxis=list(title="% of catch", ticksuffix="%", range=c(0,100)), yaxis=list(title=""), margin=list(l=70, t=20, b=40))
   })
   output$compInsight <- renderUI({
     req(rv$obs); gs <- genus_share(rv$obs); sx <- sex_split(rv$obs); req(!is.null(gs), !is.null(sx))
-    femp <- round(100 * sx$count[sx$sex=="F"] / max(1, sum(sx$count)))
-    insight_banner("pie-chart", tone="terra", HTML(sprintf("The catch is <b>%.0f%%</b> %s and <span class='ci-hero'>%.0f%% female</span>. Female-heavy is the CO2 trap doing its job, not a population sex ratio.",
-      gs$share[1], gs$genus[1], femp)))
+    f <- sum(sx$count[sx$sex=="F"]); m <- sum(sx$count[sx$sex=="M"]); u <- sum(sx$count[sx$sex=="U"])
+    femp <- if (f + m > 0) round(100 * f / (f + m)) else NA_real_           # of SEXED — same denominator as the hero badge
+    pct_u <- round(100 * u / max(1, f + m + u))
+    insight_banner("pie-chart", tone="terra", HTML(sprintf("The catch is <b>%.0f%%</b> %s, and <span class='ci-hero'>%s%% of the sexed mosquitoes are female</span>%s. Female-heavy is the CO2 trap doing its job, not a population sex ratio.",
+      gs$share[1], gs$genus[1], ifelse(is.na(femp), "—", as.character(femp)),
+      if (pct_u >= 20) sprintf(" (%d%% of the catch was left unsexed)", pct_u) else "")))
   })
 
   # ---- The Pulse (signature) ----
@@ -160,21 +166,25 @@ server <- function(input, output, session) {
     req(rv$obs); pk <- pulse_phenology(rv$obs, rv$effw); if (is.null(pk) || nrow(pk) < 2) return(note_plot("Not enough weekly trapping to draw a pulse"))
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     muted <- if (is_dark()) "#9b91c0" else "#6f6790"
+    reg <- precip_regime(cl)
     p <- plot_ly()
-    # ±1 SE ribbon between years
+    # band = the middle 50% of years (inter-quartile spread around the median line)
     if (any(pk$se > 0)) p <- p %>%
       add_trace(x=c(pk$week, rev(pk$week)), y=c(pk$index+pk$se, rev(pk$index-pk$se)), type="scatter", mode="lines",
-        fill="toself", fillcolor="rgba(124,82,224,0.14)", line=list(width=0), name="±1 SE", hoverinfo="skip", showlegend=FALSE)
-    p <- p %>% add_trace(x=~pk$week, y=~pk$index, type="scatter", mode="lines+markers", name="Activity",
+        fill="toself", fillcolor="rgba(124,82,224,0.14)", line=list(width=0), name="middle 50% of years", hoverinfo="skip", showlegend=FALSE)
+    p <- p %>% add_trace(x=~pk$week, y=~pk$index, type="scatter", mode="lines+markers", name="Activity (median)",
       line=list(color=DDL$violet, width=3), marker=list(color=DDL$violet, size=6),
-      customdata=~pk$n_years, hovertemplate="week %{x}<br>%{y:.1f} / trap-night<br>%{customdata} years<extra></extra>")
+      customdata=~pk$n_years, hovertemplate="week %{x}<br>%{y:.1f} / trap-night (median of %{customdata} yrs)<extra></extra>")
     shp <- list()
-    if (!is.null(cl) && nrow(cl) && !is.null(cl$monsoon_month_min) && !is.na(cl$monsoon_month_min) && isTRUE(cl$has_gauge)) {
-      wlo <- (cl$monsoon_month_min - 1) * 4.345; whi <- cl$monsoon_month_max * 4.345
+    if (reg %in% c("monsoon","summer_rain")) {
+      wlo <- (cl$monsoon_month_min[1] - 1) * 4.345; whi <- cl$monsoon_month_max[1] * 4.345
       shp <- list(list(type="rect", xref="x", yref="paper", x0=wlo, x1=whi, y0=0, y1=1,
         fillcolor="rgba(95,158,18,0.14)", line=list(width=0), layer="below"))
     }
-    band_note <- if (length(shp)) " · shaded band = the monsoon window" else " · no rain gauge here, so no monsoon band"
+    band_note <- switch(reg,
+      monsoon     = " · shaded band = the summer-monsoon window",
+      summer_rain = " · shaded band = the warm-season-rain window",
+      if (!is.null(cl) && nrow(cl) && isTRUE(cl$has_gauge[1])) " · no summer-rain peak here (winter/spring-rain site)" else " · no NEON rain gauge here, so no precip band")
     p %>% plotly_theme() %>% plotly::layout(shapes=shp,
       xaxis=list(title="Week of the year", range=c(0,53)), yaxis=list(title="Mosquitoes / trap-night", rangemode="tozero"),
       margin=list(l=56, r=20, t=44, b=44),
@@ -184,24 +194,33 @@ server <- function(input, output, session) {
     req(rv$obs); pk <- pulse_phenology(rv$obs, rv$effw); req(!is.null(pk), nrow(pk) >= 2)
     pw <- pk$week[which.max(pk$index)]; pm <- format(as.Date("2021-01-01") + (pw*7 - 7), "%B")
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
-    desert <- identical(biome_of(rv$site), "desert")
-    msg <- if (desert)
-      sprintf("Activity peaks around <b>week %d (%s)</b>. In this water-limited desert the pulse rides the <b>summer monsoon</b>: rain fills ephemeral water, and adults emerge a couple of weeks later.", pw, pm)
+    reg <- precip_regime(cl); desert <- identical(biome_of(rv$site), "desert")
+    head_txt <- sprintf("Activity peaks around <b>week %d (%s)</b>. ", pw, pm)
+    body <- if (reg == "monsoon")
+      "In this water-limited desert the pulse rides the <b>summer monsoon</b>: rain fills ephemeral water, and adults emerge a couple of weeks later."
+    else if (reg == "summer_rain")
+      "The pulse tracks the site's <b>warm-season rains and warmth</b>. (Most of this site's rain falls outside summer, so this is not a true monsoon system.)"
+    else if (desert)
+      "This is a desert where the summer monsoon usually drives the pulse, but <b>there is no NEON rain gauge here</b>, so the chart can't show the rain timing behind it."
     else
-      sprintf("Activity peaks around <b>week %d (%s)</b>. In this cooler, wetter system the pulse is paced by <b>warmth and degree-days</b> rather than the monsoon.", pw, pm)
-    insight_banner("activity", tone="navy", HTML(msg))
+      "In this cooler, wetter system the pulse is paced by <b>warmth and degree-days</b> rather than a summer rain pulse."
+    insight_banner("activity", tone="navy", HTML(paste0(head_txt, body)))
   })
 
   # ---- Community (on the Pulse tab) ----
+  # mos_accum is the one non-trivial computation; cache it per-site so it runs ONCE
+  # (not once per output, and not again on every dark-mode toggle that re-runs the
+  # themed render expr). Keyed only on the data, so theme flips reuse it.
+  accum <- reactive({ req(rv$obs); mos_accum(rv$obs, rv$traps) })
   output$accumPlot <- renderPlotly({
-    ac <- mos_accum(rv$obs, rv$traps); if (is.null(ac)) return(note_plot("Not enough collection occasions for an accumulation curve"))
+    ac <- accum(); if (is.null(ac)) return(note_plot("Not enough collection occasions for an accumulation curve"))
     plot_ly(ac, x=~occasions, y=~richness, type="scatter", mode="lines", line=list(color=DDL$violet, width=3),
       fill="tozeroy", fillcolor="rgba(124,82,224,0.08)",
       hovertemplate="%{x} trap-nights<br>%{y:.0f} species<extra></extra>") %>%
       plotly_theme(legend=FALSE) %>% plotly::layout(xaxis=list(title="Collection occasions (trap-nights)"), yaxis=list(title="Species found"))
   })
   output$accumInsight <- renderUI({
-    ac <- mos_accum(rv$obs, rv$traps); req(!is.null(ac))
+    ac <- accum(); req(!is.null(ac))
     slope <- ac$richness[nrow(ac)] - ac$richness[max(1,nrow(ac)-5)]
     insight_banner("graph-up", tone="pine", HTML(sprintf("By <b>%d</b> trap-nights, <span class='ci-hero'>%.0f</span> species had turned up.%s",
       ac$occasions[nrow(ac)], ac$richness[nrow(ac)], if (slope > 1) " The curve is still rising; more trapping would find more species." else " The curve is flattening; most catchable species have been found.")))
@@ -512,7 +531,7 @@ server <- function(input, output, session) {
       div(class="about-card", h4("\U0001F99F What this is"),
         p("An (unofficial) explorer for NEON's ", tags$b("Mosquitoes sampled from CO2 traps"), " (", tags$code("DP1.10043.001"), "). A CO2 trap releases carbon dioxide, the gas animals breathe out, and host-seeking female mosquitoes fly toward it. NEON sorts, weighs, and identifies the catch.")),
       div(class="about-card", h4(bs_icon("activity"), " Activity index, not population"),
-        p("A CO2 trap measures host-seeking ", tags$b("activity"), ", not a headcount. Big catches are subsampled, so an identified count is scaled up to the whole trap by the ", tags$b("subsample weight ratio"), ", then divided by ", tags$b("trap-nights"), " (trapHours ÷ 24). The result is mosquitoes per trap-night, a ", tags$b("within-site index"), ", never a population."),
+        p("A CO2 trap measures host-seeking ", tags$b("activity"), ", not a headcount. Big catches are subsampled, so an identified count is scaled up to the whole trap by ", tags$b("1 / proportionIdentified"), " (the fraction NEON identified), then divided by ", tags$b("trap-nights"), " (trapHours ÷ 24). The result is mosquitoes per trap-night, a ", tags$b("within-site index"), ", never a population."),
         p("Almost every mosquito in the catch is ", tags$b("female"), ", because only females bite and seek the CO2 plume. Read the sex split as a quality signal: a near-all-female catch is a normal, healthy trap.")),
       div(class="about-card", h4(bs_icon("calculator"), " How many species?"),
         p(tags$b("Chao2"), " (incidence-based) estimates how many species use the site beyond those caught. The sampling unit is a ", tags$b("collection occasion"), " (one trap-night), so revisits aren't double-counted. CO2 traps miss day-active and rare mosquitoes.")),
