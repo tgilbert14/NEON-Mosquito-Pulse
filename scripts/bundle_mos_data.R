@@ -39,54 +39,61 @@ build_site <- function(site) {
   srt <- tibble::as_tibble(r$mos_sorting)
   trp <- tibble::as_tibble(r$mos_trapping)
 
-  # subsample weight ratio: scale identified counts up to the whole trap
-  sort_ratio <- srt %>%
+  # subsample expansion: NEON identifies a PROPORTION of a big catch (mos_sorting
+  # $proportionIdentified), so scale the identified count up to the whole trap by
+  # 1 / proportionIdentified. (The real product has no totalWeight/subsampleWeight.)
+  sort_map <- srt %>%
     dplyr::transmute(subsampleID, sampleID,
-                     sampleType = .data$sampleType %||% NA_character_,
-                     subsampleWeight = num(.data$subsampleWeight), totalWeight = num(.data$totalWeight),
-                     scale = ifelse(num(.data$subsampleWeight) > 0 & is.finite(num(.data$totalWeight)),
-                                    num(.data$totalWeight) / num(.data$subsampleWeight), 1))
+                     proportionIdentified = num(.data$proportionIdentified),
+                     scale = ifelse(num(.data$proportionIdentified) > 0, 1 / num(.data$proportionIdentified), 1))
+  # trap deployment context = the effort table (one row per sampleID = one trap-night).
+  # DP1.10043.001 has NO trapID: one CO2 trap per plotID per collection.
   trap_ctx <- trp %>%
-    dplyr::transmute(sampleID, plotID, trapID,
+    dplyr::transmute(sampleID, plotID,
                      collectDate = as.Date(substr(as.character(.data$collectDate), 1, 10)),
                      trapHours = num(.data$trapHours),
-                     nightOrDay = tolower(.data$nightOrDay %||% NA_character_),
-                     targetTaxaPresent = .data$targetTaxaPresent %||% NA_character_,
-                     sampleCondition = .data$sampleCondition %||% NA_character_,
+                     nightOrDay = tolower(as.character(.data$nightOrDay)),
+                     targetTaxaPresent = as.character(.data$targetTaxaPresent),
+                     sampleCondition = as.character(.data$sampleCondition),
                      lat = num(.data$decimalLatitude), lng = num(.data$decimalLongitude),
-                     nlcdClass = .data$nlcdClass %||% NA_character_)
+                     nlcdClass = as.character(.data$nlcdClass))
 
   obs <- idd %>%
-    dplyr::left_join(sort_ratio, by = "subsampleID") %>%
-    dplyr::left_join(trap_ctx %>% dplyr::distinct(sampleID, .keep_all = TRUE), by = "sampleID") %>%
-    dplyr::filter(!is.na(.data$scientificName), num(.data$individualCount) > 0) %>%
+    dplyr::select(subsampleID, plotID, collectDate, taxonID, scientificName, taxonRank,
+                  family, genus, sex, individualCount, nativeStatusCode, identificationQualifier) %>%
+    dplyr::left_join(sort_map, by = "subsampleID") %>%
+    dplyr::left_join(trap_ctx %>% dplyr::distinct(.data$sampleID, .keep_all = TRUE) %>%
+                       dplyr::select(sampleID, trapHours, nightOrDay, targetTaxaPresent, sampleCondition),
+                     by = "sampleID") %>%
+    dplyr::filter(!is.na(.data$scientificName), num(.data$individualCount) > 0, !is.na(.data$sampleID)) %>%
     dplyr::transmute(
-      sampleID, trapkey = pk(.data$plotID, .data$trapID), plotID, trapID,
-      year = as.integer(substr(as.character(.data$collectDate), 1, 4)), collectDate,
-      week = as.integer(format(.data$collectDate, "%U")),
-      taxonID = .data$taxonID %||% NA_character_, scientificName, vernacularName = .data$vernacularName %||% NA_character_,
-      taxonRank = .data$taxonRank %||% NA_character_,
+      sampleID, trapkey = .data$plotID, plotID = .data$plotID,
+      trapID = sub("^[A-Z]{4}_", "", .data$plotID),
+      year = as.integer(substr(as.character(.data$collectDate), 1, 4)),
+      collectDate = as.Date(substr(as.character(.data$collectDate), 1, 10)),
+      week = as.integer(format(as.Date(substr(as.character(.data$collectDate), 1, 10)), "%U")),
+      taxonID, scientificName, vernacularName = NA_character_, taxonRank,
       is_species = is_species_rank(.data$taxonRank, .data$scientificName),
-      genus = sub(" .*", "", .data$scientificName),
-      sex = toupper(substr(.data$sex %||% "U", 1, 1)),
-      nativeStatusCode = .data$nativeStatusCode %||% NA_character_,
+      genus = ifelse(!is.na(.data$genus) & nzchar(.data$genus), .data$genus, sub(" .*", "", .data$scientificName)),
+      sex = toupper(substr(as.character(.data$sex), 1, 1)),
+      nativeStatusCode,
       count = num(.data$individualCount) * ifelse(is.finite(.data$scale), .data$scale, 1),   # whole-trap scaled
-      is_target = !grepl("bycatch|other|non-?target", tolower(.data$sampleType %||% "")) ,
+      is_target = is.na(.data$family) | .data$family == "Culicidae",
       nightOrDay, trapHours, targetTaxaPresent, sampleCondition,
-      subsampleWeight = .data$subsampleWeight, totalWeight = .data$totalWeight,
-      expansionFactor = round(ifelse(is.finite(.data$scale), .data$scale, 1), 2),
-      identificationQualifier = .data$identificationQualifier %||% "") %>%
+      proportionIdentified, expansionFactor = round(ifelse(is.finite(.data$scale), .data$scale, 1), 2),
+      identificationQualifier) %>%
     dplyr::filter(!is.na(.data$year))
-  obs$sex[!(obs$sex %in% c("F","M"))] <- "U"
+  obs$sex[!(obs$sex %in% c("F","M"))] <- "U"; obs$vernacularName <- NA_character_
 
-  traps <- trap_ctx %>% dplyr::mutate(trapkey = pk(.data$plotID, .data$trapID)) %>%
-    dplyr::group_by(.data$trapkey) %>%
-    dplyr::summarise(plotID = mode_chr(.data$plotID), trapID = mode_chr(.data$trapID),
+  # traps (effort) = one row per plotID
+  traps <- trap_ctx %>% dplyr::group_by(.data$plotID) %>%
+    dplyr::summarise(trapID = sub("^[A-Z]{4}_", "", dplyr::first(.data$plotID)),
                      nlcdClass = mode_chr(.data$nlcdClass),
                      lat = stats::median(.data$lat, na.rm = TRUE), lng = stats::median(.data$lng, na.rm = TRUE),
-                     collectDate = max(.data$collectDate, na.rm = TRUE),
+                     collectDate = suppressWarnings(max(.data$collectDate, na.rm = TRUE)),
                      trap_nights = sum(ifelse(is.finite(.data$trapHours) & .data$trapHours > 0, .data$trapHours, 0), na.rm = TRUE) / 24,
-                     n_collections = dplyr::n_distinct(.data$sampleID), .groups = "drop")
+                     n_collections = dplyr::n_distinct(.data$sampleID), .groups = "drop") %>%
+    dplyr::mutate(trapkey = .data$plotID)
   # ATTEMPTED collection occasions (one row per sampleID in the trapping table,
   # INCLUDING zero-catch nights) -> the honest pulse / ubiquity denominator.
   occ <- trap_ctx %>% dplyr::distinct(.data$sampleID, .keep_all = TRUE) %>%

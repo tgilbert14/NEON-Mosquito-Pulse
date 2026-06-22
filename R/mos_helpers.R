@@ -54,7 +54,10 @@ vector_board <- function(obs, n_occ = NULL, trap_nights = NULL) {
       index = round(.data$total / tn, 3),
       ubiquity = round(100 * .data$n_occ_present / n_occ, 1),
       female_share = ifelse(.data$female + .data$male > 0, round(100 * .data$female / (.data$female + .data$male)), NA_real_),
-      genus = .data$genus %||% sub(" .*", "", .data$scientificName)) %>%
+      genus = .data$genus %||% sub(" .*", "", .data$scientificName),
+      # NEON mosquito data carries no common names, so the scientific name IS the
+      # display name. Fall back to it (NA-safe, unlike %||%) so nothing shows "NA".
+      vernacular = ifelse(is.na(.data$vernacular) | !nzchar(.data$vernacular), .data$scientificName, .data$vernacular)) %>%
     dplyr::arrange(dplyr::desc(.data$index))
 }
 
@@ -97,8 +100,14 @@ pulse_phenology <- function(obs, effort_week = NULL) {
   } else {                                   # fallback: per-caught-occasion (no effort table available)
     yw <- catch; yw$idx <- yw$total / pmax(1L, yw$n_occ)
   }
+  # Across years per week: the MEDIAN, not the mean. Mosquito catch is wildly
+  # skewed and outlier-prone (one fluke year can be 1000x a normal week), so a
+  # mean lets a single freak January collection masquerade as the seasonal peak.
+  # The median gives the typical year's pulse (standard in mosquito surveillance);
+  # the band is the inter-quartile spread, so noisy weeks read as noisy.
   yw %>% dplyr::group_by(.data$week) %>%
-    dplyr::summarise(index = mean(.data$idx), se = if (dplyr::n() > 1) stats::sd(.data$idx) / sqrt(dplyr::n()) else 0,
+    dplyr::summarise(index = stats::median(.data$idx),
+                     se = if (dplyr::n() > 1) stats::IQR(.data$idx) / 2 else 0,
                      n_years = dplyr::n(), .groups = "drop") %>%
     dplyr::arrange(.data$week)
 }
@@ -286,10 +295,10 @@ mos_qc_report <- function(obs, sci, traps = NULL) {
 mos_codebook <- function() {
   data.frame(
     column = c("scientificName","vernacularName","genus","sampleID","trapkey","plotID","trapID","year","collectDate",
-               "sex","count","is_target","nightOrDay","trapHours","subsampleWeight","totalWeight","expansionFactor",
+               "sex","count","is_target","nightOrDay","trapHours","proportionIdentified","expansionFactor",
                "targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode",
                "index","ubiquity","female_share","trap_nights","mos_per_tn","culex_share","S_obs","chao2","coverage","S_rare"),
-    units = c("","","","","","","","year","date","F/M/U","# mosquitoes (est.)","logical","night/day","hours","g","g","x",
+    units = c("","","","","","","","year","date","F/M/U","# mosquitoes (est.)","logical","night/day","hours","0-1","x",
               "Y/N","category","qualifier","code","per trap-night","% of occasions","% of sexed","# trap-nights",
               "per trap-night","% of catch","# species","# species","0-1","# species"),
     description = c(
@@ -297,19 +306,18 @@ mos_codebook <- function() {
       "Common name where one exists.",
       "Genus (Culex, Aedes, Anopheles, Culiseta, Psorophora, ...). Culex is the main West Nile vector.",
       "NEON sample identifier = one trap deployment / collection event (one trap-night). The incidence replicate.",
-      "Trap identifier = plotID_trapID, the fixed spot a CO2 trap is set.",
-      "NEON plot (grid) identifier.",
-      "Trap identifier within a plot.",
+      "Trap key = plotID; DP1.10043.001 deploys one CO2 trap per plot per night (no separate trapID).",
+      "NEON plot (grid) identifier, the fixed spot a CO2 trap is set.",
+      "The plot's trap location (the plotID numeric suffix).",
       "Calendar year of the collection.",
       "Date the trap was collected.",
       "Sex of the individuals. CO2 traps catch overwhelmingly host-seeking FEMALES by design; a near-all-female catch is the trap working, not a population fact. U = undetermined.",
-      "ESTIMATED number of mosquitoes = identified count scaled to the whole trap by the subsample weight ratio (totalWeight/subsampleWeight). Continuous; rounded only at display.",
-      "TRUE if a target mosquito (Culicidae); FALSE = bycatch, excluded from the index and richness.",
+      "ESTIMATED number of mosquitoes = identified count scaled to the whole trap by 1 / proportionIdentified. Continuous; rounded only at display.",
+      "TRUE if a target mosquito (family Culicidae). The expert-ID table is Culicidae only, so this is effectively all rows; bycatch is not carried in this product.",
       "Whether the trap bout ran at night (default for the index) or day.",
       "Trap deployment duration in hours; trapHours/24 = trap-nights, the effort denominator. NA/0 = no usable effort, dropped from the denominator (not a zero catch).",
-      "Weight of the identified subsample.",
-      "Total weight of the whole trap catch. totalWeight/subsampleWeight = the expansion factor.",
-      "Subsample expansion factor applied to scale the identified count to the whole trap.",
+      "Fraction of the trap's catch that NEON identified (mos_sorting). The whole-trap count = individualCount / proportionIdentified.",
+      "Subsample expansion factor (= 1 / proportionIdentified) applied to scale the identified count to the whole trap.",
       "NEON flag for whether target taxa were present in the trap (Y/N).",
       "Condition of the sample on receipt; compromised conditions may undercount.",
       "Identification qualifier (e.g. cf., near); flags an uncertain ID. Excluded from richness, kept in the index.",

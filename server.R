@@ -52,7 +52,7 @@ server <- function(input, output, session) {
     rv$label <- label; rv$site <- b$meta$site; rv$is_demo <- is_demo; rv$sp <- NULL; rv$grid <- NULL
     yrs <- range(b$obs$year, na.rm=TRUE); rv$ctx <- paste0(b$meta$site, " · ", if (yrs[1]==yrs[2]) yrs[1] else paste0(yrs[1],"–",yrs[2]))
     shinyjs::show("mainTabsWrap"); shinyjs::show("spPickerWrap"); shinyjs::hide("splash")
-    ch <- setNames(rv$board$scientificName, sprintf("%s · %s", rv$board$vernacular %||% rv$board$scientificName, rv$board$scientificName))
+    ch <- setNames(rv$board$scientificName, sprintf("%s · %s", rv$board$scientificName, rv$board$genus))
     updateSelectizeInput(session, "spSel", choices = c("Pick a species…"="", ch), selected = "", server = TRUE)
     nav_select("tabs", "overview"); session$sendCustomMessage("countUp", list()); session$sendCustomMessage("loadDone", list())
     invisible(TRUE)
@@ -117,8 +117,8 @@ server <- function(input, output, session) {
     pts <- c(
       sprintf("Over <b>%s</b>, NEON ran about <b>%s</b> trap-nights here and caught an estimated <b>%s</b> mosquitoes of <b>%d</b> species.",
         yr_lab, fmt_int(rv$tn), fmt_int(sum(brd$total)), nrow(brd)),
-      sprintf("The most-active mosquito is the <b>%s</b> (<i>%s</i>), about <b>%.2f</b> per trap-night; the most <i>widespread</i> is the <b>%s</b>, on <b>%.0f%%</b> of trap-nights.",
-        nm(top), top$scientificName, top$index, nm(ubi), ubi$ubiquity))
+      sprintf("The most-active mosquito is <b><i>%s</i></b>, about <b>%.2f</b> per trap-night; the most <i>widespread</i> is <b><i>%s</i></b>, on <b>%.0f%%</b> of trap-nights.",
+        top$scientificName, top$index, ubi$scientificName, ubi$ubiquity))
     if (length(culex) && !is.na(culex) && culex > 0)
       pts <- c(pts, sprintf("<b>Culex</b>, the West Nile vector group, makes up about <b>%.0f%%</b> of the catch here. This shows where they are active, not whether any carry a virus.", culex))
     if (!is.null(ch)) {
@@ -225,8 +225,8 @@ server <- function(input, output, session) {
     brd <- rv$board; req(brd)
     brd$reliable <- brd$n_occ_present >= 3
     brd$col <- genus_col(brd$genus); brd$col[!brd$reliable] <- "rgba(138,135,160,0.35)"
-    brd$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b>", brd$vernacular %||% brd$scientificName, "</b><br/>",
-      "<em>", brd$scientificName, " · ", brd$genus, "</em><br/>",
+    brd$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b><em>", brd$scientificName, "</em></b><br/>",
+      "<em>genus ", brd$genus, "</em><br/>",
       "<span class='smt-pin-stats'>", brd$index, " / trap-night · on ", brd$ubiquity, "% of nights<br/>",
       ifelse(is.na(brd$female_share), "sex not recorded", paste0(brd$female_share, "% female")), " · ", round(brd$total), " caught</span>",
       ifelse(brd$reliable, "", "<br/><span class='smt-pin-rar' style='color:#ffd9a7'>⚠ few nights</span>"),
@@ -259,8 +259,8 @@ server <- function(input, output, session) {
       p("Tap a dot above and choose “Open species profile”, or pick a species in the sidebar.")))
     r <- rv$board[rv$board$scientificName == rv$sp,]; if (!nrow(r)) return(NULL)
     div(class="lab-sel", span(class="ls-emoji","\U0001F9EC"),
-      div(class="ls-body", div(class="ls-id", tags$b(r$vernacular %||% r$scientificName), sprintf(" · %.2f / trap-night · %.0f%% of nights", r$index, r$ubiquity)),
-        div(class="ls-dom", em(r$scientificName), sprintf(" · %s", r$genus))),
+      div(class="ls-body", div(class="ls-id", tags$b(em(r$scientificName)), sprintf(" · %.2f / trap-night · %.0f%% of nights", r$index, r$ubiquity)),
+        div(class="ls-dom", sprintf("genus %s", r$genus))),
       actionButton("goSpFromCard", tagList(bs_icon("arrows-fullscreen"), " Open full profile"), class="btn-outline-dark btn-sm"))
   })
   observeEvent(input$goSpFromCard, nav_select("tabs","species"))
@@ -306,9 +306,9 @@ server <- function(input, output, session) {
       else div(class="qc-flag qc-flag-ok", bs_icon("check-circle-fill"),
         div(class="qcf-body", div(class="qcf-title","No data-quality flags for this species"),
           div(class="qcf-detail","Trap effort, subsample weights, sex, and identification all look consistent, nothing to verify."))))
-    body <- div(id="qcCardNode", class="qc-card", `data-short`=gsub("[^A-Za-z]","",substr(r$vernacular %||% r$scientificName,1,20)),
+    body <- div(id="qcCardNode", class="qc-card", `data-short`=gsub("[^A-Za-z]","",substr(r$scientificName,1,20)),
       div(class="qc-head", span(class="qc-emoji","\U0001F9EC"),
-        div(div(class="qc-id", r$vernacular %||% r$scientificName), div(class="qc-sci", em(r$scientificName), sprintf(" · %s", r$genus))),
+        div(div(class="qc-id", em(r$scientificName)), div(class="qc-sci", sprintf("genus %s", r$genus))),
         div(class="qc-head-badges", glow_badge(paste0(round(r$total), " caught"), DDL$sky))),
       div(class="qc-tiles",
         tile(r$index, "per trap-night"), tile(paste0(r$ubiquity,"%"), "of nights"),
@@ -359,7 +359,7 @@ server <- function(input, output, session) {
     content = function(file){ sci <- rv$sp; req(sci); d <- species_detail(rv$obs, sci); req(!is.null(d))
       # include the provenance columns an analyst needs to RE-DERIVE count (the whole-
       # trap expansion) and replicate the QC filtering — the export must reproduce itself.
-      keep <- intersect(c("scientificName","vernacularName","genus","taxonRank","sampleID","plotID","trapID","year","collectDate","week","sex","count","is_target","nightOrDay","trapHours","subsampleWeight","totalWeight","expansionFactor","targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode"), names(d))
+      keep <- intersect(c("scientificName","genus","taxonRank","sampleID","plotID","trapID","year","collectDate","week","sex","count","is_target","nightOrDay","trapHours","proportionIdentified","expansionFactor","targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode"), names(d))
       utils::write.csv(d[, keep], file, row.names=FALSE, na="") },
     contentType="text/csv")
   output$codebookCsv <- downloadHandler(
