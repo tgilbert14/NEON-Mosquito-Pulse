@@ -5,7 +5,7 @@ An explorer for NEON's **Mosquitoes sampled from CO2 traps** (`DP1.10043.001`) â
 > **The desert monsoon sets off a mosquito pulse.** When the summer rains arrive, standing water appears and, two to six weeks later, adult mosquitoes emerge, paced by how warm those weeks are. This app lets you watch that pulse inside a single desert site, and place it against the whole NEON network in climate space. It is the water-limited mirror of the suite's other climate trigger, the spring warmth that wakes the plants.
 
 **Cover (GitHub Pages):** https://tgilbert14.github.io/NEON-Mosquito-Pulse/
-**App (Posit Connect Cloud):** _set after first deploy â€” see [DEPLOY.md](DEPLOY.md)_
+**App (Posit Connect Cloud):** https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/
 
 ---
 
