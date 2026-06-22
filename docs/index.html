@@ -420,18 +420,13 @@
         <div class="stat"><div class="n">monsoon</div><div class="l">sets the pulse</div></div>
       </div>
 
-      <div class="placeholder-note">
-        <span class="pn-mark">&#9888;</span>
-        <span><b>Preview build.</b> The numbers shown right now are representative synthetic mosquito catches, in place while the real NEON <code>DP1.10043.001</code> fetch runs. They illustrate how the app reads; they are not measurements. The data pipeline that pulls and bundles the real collections ships with the app.</span>
-      </div>
-
       <details class="more">
         <summary>How we keep it honest</summary>
         <div class="mbody">
           Every chart says how its number was made. When we show how busy a species is, that is a
           <b>catch rate</b> (mosquitoes per trap-night), not a headcount, because a CO2 trap counts the
           host-seeking females that fly toward it, not every mosquito living nearby. Big catches are
-          scaled honestly: NEON identifies a weighed subsample of a huge night and we scale it back up
+          scaled honestly: NEON identifies a set fraction of a huge night and we scale it back up
           to the whole trap, and we divide by trap-nights so a trap that ran longer is not credited with
           extra mosquitoes. Counts of how many kinds live at a site are adjusted so sites trapped more
           often are not credited with extra species just for being visited more. When we compare sites

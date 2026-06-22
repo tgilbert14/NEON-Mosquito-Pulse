@@ -41,15 +41,11 @@ shiny::runApp(".")
 
 The app reads only the committed `data/` bundles, no live fetch at runtime.
 
-### Preview data (this build)
+### The data is real
 
-There is no R toolchain shipped with this repo, so the committed `data/` starts as **representative synthetic placeholder catches** so the app and cover render real-looking numbers. They are clearly labelled (a banner in the app + cover) and are **not measurements**. Regenerate them any time with:
+The committed `data/` bundles are **real NEON catches** — 46 sites of `DP1.10043.001` (mosquitoes from CO2 traps, ~2014–2024), plus the co-located precip/temperature overlays that anchor each site's monsoon window. No synthetic placeholders ship in this build. Rebuild or refresh them with the pipeline below.
 
-```r
-Rscript scripts/build_synth_bundle.R
-```
-
-### Real NEON data
+### Rebuild / refresh the real NEON data
 
 ```bash
 # 1. pull the raw product for every site (R-4.1.1; resumable)
@@ -64,7 +60,7 @@ Rscript scripts/build_cross_site.R
 Rscript scripts/write_manifest.R
 ```
 
-Running the real pipeline overwrites the synthetic bundles; `meta$synthetic` drops away and the preview banner disappears automatically.
+Re-running the pipeline refreshes the committed bundles in place; the monthly GitHub Action (`refresh-data.yml`) reruns the precompute steps and pushes, and Connect Cloud re-publishes.
 
 ## Data product
 

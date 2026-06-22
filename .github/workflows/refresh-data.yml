@@ -4,10 +4,11 @@ name: Refresh NEON data bundle
 # Connect Cloud watches this repo and re-publishes on every push to `master`.
 #
 # CADENCE — tuned to how the mosquito product updates:
-#   • MONTHLY (first Saturday night, Arizona time): a light ENV top-up
-#     (precip/temperature, last ~14 months) + a rebuild of the climate + cross-
-#     site precompute. Fast and low-risk; it never drops sites.
-#   • ON DEMAND: the full 47-site mosquito re-pull (DP1.10043.001). Mosquito
+#   • MONTHLY (Saturday night, Arizona time): rebuild the climate + cross-site
+#     precompute from the committed bundles + env overlays and redeploy. Fast and
+#     low-risk; it never drops sites. (The env overlays ship committed from the
+#     wider suite, so there is no separate environmental re-pull here.)
+#   • ON DEMAND: the full 46-site mosquito re-pull (DP1.10043.001). Mosquito
 #     collections publish on a lag, so a monthly re-pull is wasteful; tick
 #     `refetch_mosquitoes` in the Actions tab when NEON publishes a new season.
 #
@@ -21,11 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       refetch_mosquitoes:
-        description: "Also re-pull all 47 mosquito sites (DP1.10043.001) — slow, do this when NEON publishes a new season"
-        type: boolean
-        default: false
-      skip_download:
-        description: "Skip the environmental re-pull; just rebuild the precompute from committed bundles and redeploy (fast test)"
+        description: "Also re-pull all 46 mosquito sites (DP1.10043.001) — slow, do this when NEON publishes a new season"
         type: boolean
         default: false
 
@@ -74,7 +71,7 @@ jobs:
             shiny, bslib, bsicons, plotly, leaflet, DT, shinyjs,
             shinycssloaders, RColorBrewer, htmltools, cpp11
 
-      # Heavy, ON-DEMAND: re-pull all 47 mosquito sites and re-bundle. Guarded so a
+      # Heavy, ON-DEMAND: re-pull all 46 mosquito sites and re-bundle. Guarded so a
       # partial pull can't silently shrink the app — only re-bundles when ≥30 sites
       # were fetched (mosquitoes are absent at some cold/dry sites, so the floor is
       # lower than the bird app's 40).

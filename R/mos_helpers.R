@@ -385,5 +385,17 @@ mos_codebook <- function() {
       "Cross-site CSV: the most-active genus at the site."),
     stringsAsFactors = FALSE)
 
-  rbind(base, grid, cross)
+  pulse <- data.frame(
+    column = c("week","index_median","iqr","n_years","monsoon_month_min","monsoon_month_max"),
+    units  = c("ISO week","per trap-night","per trap-night","# years","month","month"),
+    description = c(
+      "Pulse CSV: ISO week of the year (0-53).",
+      "Pulse CSV: median activity index across years for this week (the headline pulse line). Median, not mean, because catch is heavily skewed.",
+      "Pulse CSV: inter-quartile range across years for this week (the shaded band = the middle 50% of years).",
+      "Pulse CSV: number of years contributing a value for this week.",
+      "Pulse CSV: first month of the site's summer-monsoon window (NA where the site has no NEON gauge / no summer-rain peak).",
+      "Pulse CSV: last month of the site's summer-monsoon window (NA where the site has no NEON gauge / no summer-rain peak)."),
+    stringsAsFactors = FALSE)
+
+  rbind(base, grid, cross, pulse)
 }

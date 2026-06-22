@@ -43,13 +43,13 @@ activity index       = Σ estimatedTotalCount / trap-nights      # trap-nights =
 2. **Inner-joining away the zeros.** A `targetTaxaPresent = "N"` trap-night is real effort with zero catch. Drop it and the index biases upward.
 3. **trapHours = NA/0 ≠ zero catch.** It is *no usable effort* — dropped from the denominator, never divided by.
 4. **Female-heavy is the method, not biology.** Always frame the ~95% female catch as the CO2 trap selecting host-seekers.
-5. **Mixing day and night bouts.** CO2-trap mosquito activity is nocturnal/crepuscular; day bouts dilute the index and the pulse. The app defaults to night-only.
+5. **Day vs night bouts.** A NEON bout is one night interval plus the following day interval; the protocol intends BOTH, so the app counts both in the activity index and its denominator (it does not filter to night-only). The `daytime trap bout` QC flag is informational, surfacing day-heavy effort for the curious — not a correction.
 6. **Desert "warmer = more" is non-monotone.** Warmth speeds larval development up to an optimum (~24–28 °C for Culex), then extreme heat + evaporation *suppresses* the pulse. State the ceiling; don't encode a monotone temperature prior in deserts.
 7. **Annual per-site verdicts are underpowered.** Mosquito annual series are short and zero-inflated (worse than the n≥6 cascade floor). The within-season weekly pulse is testable where the annual link is not; cross-site claims must be **pooled** (one sign-vote per site), never per-site-verdicted.
 
 ## QC flags shipped (clickable, downloadable)
 
-`trapHours missing/zero` (high) · `catch present but targetTaxaPresent=N` (high) · `large subsample expansion / missing weights` (warn) · `compromised sampleCondition` (warn) · `non-mosquito bycatch` (info) · `uncertain identification` (info) · `daytime trap bout` (warn).
+`trapHours missing/zero` (high) · `catch present but targetTaxaPresent=N` (high) · `large subsample expansion (low proportionIdentified)` (warn) · `compromised sampleCondition` (warn) · `uncertain identification` (info) · `daytime trap bout` (info).
 
 ## Sources
 

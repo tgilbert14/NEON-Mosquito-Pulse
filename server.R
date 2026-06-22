@@ -167,11 +167,13 @@ server <- function(input, output, session) {
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     muted <- if (is_dark()) "#9b91c0" else "#6f6790"
     reg <- precip_regime(cl)
+    band_fill <- if (is_dark()) "rgba(149,118,255,0.26)" else "rgba(124,82,224,0.14)"   # brighten on the dark surface so the IQR/monsoon bands don't vanish
+    mons_fill <- if (is_dark()) "rgba(120,200,40,0.22)"  else "rgba(95,158,18,0.14)"
     p <- plot_ly()
     # band = the middle 50% of years (inter-quartile spread around the median line)
     if (any(pk$se > 0)) p <- p %>%
       add_trace(x=c(pk$week, rev(pk$week)), y=c(pk$index+pk$se, rev(pk$index-pk$se)), type="scatter", mode="lines",
-        fill="toself", fillcolor="rgba(124,82,224,0.14)", line=list(width=0), name="middle 50% of years", hoverinfo="skip", showlegend=FALSE)
+        fill="toself", fillcolor=band_fill, line=list(width=0), name="middle 50% of years", hoverinfo="skip", showlegend=FALSE)
     p <- p %>% add_trace(x=~pk$week, y=~pk$index, type="scatter", mode="lines+markers", name="Activity (median)",
       line=list(color=DDL$violet, width=3), marker=list(color=DDL$violet, size=6),
       customdata=~pk$n_years, hovertemplate="week %{x}<br>%{y:.1f} / trap-night (median of %{customdata} yrs)<extra></extra>")
@@ -179,7 +181,7 @@ server <- function(input, output, session) {
     if (reg %in% c("monsoon","summer_rain")) {
       wlo <- (cl$monsoon_month_min[1] - 1) * 4.345; whi <- cl$monsoon_month_max[1] * 4.345
       shp <- list(list(type="rect", xref="x", yref="paper", x0=wlo, x1=whi, y0=0, y1=1,
-        fillcolor="rgba(95,158,18,0.14)", line=list(width=0), layer="below"))
+        fillcolor=mons_fill, line=list(width=0), layer="below"))
     }
     band_note <- switch(reg,
       monsoon     = " · shaded band = the summer-monsoon window",
@@ -206,6 +208,20 @@ server <- function(input, output, session) {
       "In this cooler, wetter system the pulse is paced by <b>warmth and degree-days</b> rather than a summer rain pulse."
     insight_banner("activity", tone="navy", HTML(paste0(head_txt, body)))
   })
+  # the signature weekly pulse, as a tidy CSV (one row per ISO week)
+  output$pulseCsv <- downloadHandler(
+    filename = function() sprintf("NEON-Mosquito_pulse_%s_%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      pk <- pulse_phenology(rv$obs, rv$effw)
+      if (is.null(pk) || !nrow(pk)) { utils::write.csv(data.frame(note = "No weekly pulse for this site."), file, row.names = FALSE); return() }
+      cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
+      mlo <- if (!is.null(cl) && nrow(cl)) cl$monsoon_month_min[1] else NA
+      mhi <- if (!is.null(cl) && nrow(cl)) cl$monsoon_month_max[1] else NA
+      out <- data.frame(site = rv$site %||% NA_character_, week = pk$week,
+                        index_median = round(pk$index, 3), iqr = round(2 * pk$se, 3),
+                        n_years = pk$n_years, monsoon_month_min = mlo, monsoon_month_max = mhi)
+      utils::write.csv(out, file, row.names = FALSE, na = "") },
+    contentType = "text/csv")
 
   # ---- Community (on the Pulse tab) ----
   # mos_accum is the one non-trivial computation; cache it per-site so it runs ONCE
@@ -215,7 +231,7 @@ server <- function(input, output, session) {
   output$accumPlot <- renderPlotly({
     ac <- accum(); if (is.null(ac)) return(note_plot("Not enough collection occasions for an accumulation curve"))
     plot_ly(ac, x=~occasions, y=~richness, type="scatter", mode="lines", line=list(color=DDL$violet, width=3),
-      fill="tozeroy", fillcolor="rgba(124,82,224,0.08)",
+      fill="tozeroy", fillcolor=if (is_dark()) "rgba(149,118,255,0.18)" else "rgba(124,82,224,0.08)",
       hovertemplate="%{x} trap-nights<br>%{y:.0f} species<extra></extra>") %>%
       plotly_theme(legend=FALSE) %>% plotly::layout(xaxis=list(title="Collection occasions (trap-nights)"), yaxis=list(title="Species found"))
   })
@@ -364,22 +380,25 @@ server <- function(input, output, session) {
       if (nrow(st) > head_n) p(class="qc-cap-note", sprintf("Showing first %d of %d. Download for the full list.", head_n, nrow(st))))
   })
   output$qcSubsetCsv <- downloadHandler(
-    filename = function() sprintf("NEON-Mosquito_QC-%s_%s_%s.csv", input$mosQcInspect %||% "flag",
-      gsub("[^A-Za-z]","",substr(rv$sp %||% "species",1,20)), format(Sys.Date(),"%Y%m%d")),
+    filename = function() sprintf("NEON-Mosquito_QC-%s_%s_%s_%s.csv", input$mosQcInspect %||% "flag",
+      rv$site %||% "site", gsub("[^A-Za-z]","",substr(rv$sp %||% "species",1,20)), format(Sys.Date(),"%Y%m%d")),
     content = function(file){ q <- qc(); st <- q$sets[[input$mosQcInspect]]; req(!is.null(st))
+      st <- cbind(site = rv$site %||% NA_character_, flag = input$mosQcInspect %||% NA_character_, st)
       utils::write.csv(st, file, row.names=FALSE, na="") }, contentType="text/csv")
   output$qcReportCsv <- downloadHandler(
-    filename = function() sprintf("NEON-Mosquito_QC-report_%s_%s.csv", gsub("[^A-Za-z]","",substr(rv$sp %||% "species",1,20)), format(Sys.Date(),"%Y%m%d")),
+    filename = function() sprintf("NEON-Mosquito_QC-report_%s_%s_%s.csv", rv$site %||% "site", gsub("[^A-Za-z]","",substr(rv$sp %||% "species",1,20)), format(Sys.Date(),"%Y%m%d")),
     content = function(file){ rep <- mos_qc_report(rv$obs, rv$sp, rv$traps)
       if (is.null(rep)) rep <- data.frame(note="No data-quality flags for this species.")
+      rep <- cbind(site = rv$site %||% NA_character_, rep)
       utils::write.csv(rep, file, row.names=FALSE, na="") }, contentType="text/csv")
   output$spCsv <- downloadHandler(
-    filename = function() sprintf("NEON-Mosquito_%s_%s.csv", gsub("[^A-Za-z]","",substr(rv$sp %||% "species",1,24)), format(Sys.Date(),"%Y%m%d")),
+    filename = function() sprintf("NEON-Mosquito_%s_%s_%s.csv", rv$site %||% "site", gsub("[^A-Za-z]","",substr(rv$sp %||% "species",1,24)), format(Sys.Date(),"%Y%m%d")),
     content = function(file){ sci <- rv$sp; req(sci); d <- species_detail(rv$obs, sci); req(!is.null(d))
       # include the provenance columns an analyst needs to RE-DERIVE count (the whole-
       # trap expansion) and replicate the QC filtering — the export must reproduce itself.
       keep <- intersect(c("scientificName","genus","taxonRank","sampleID","plotID","trapID","year","collectDate","week","sex","count","is_target","nightOrDay","trapHours","proportionIdentified","expansionFactor","targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode"), names(d))
-      utils::write.csv(d[, keep], file, row.names=FALSE, na="") },
+      out <- cbind(site = rv$site %||% NA_character_, d[, keep, drop=FALSE])
+      utils::write.csv(out, file, row.names=FALSE, na="") },
     contentType="text/csv")
   output$codebookCsv <- downloadHandler(
     filename = function() sprintf("NEON-Mosquito_codebook_%s.csv", format(Sys.Date(),"%Y%m%d")),
@@ -461,7 +480,8 @@ server <- function(input, output, session) {
       xcol <- "monsoon_precip_mm"; xlab <- "Warm-season precipitation (mm · NEON gauge)"; xsuf <- " mm"
     } else { xcol <- "warm_temp_c"; xlab <- sprintf("Warm-season air temperature (%s · NEON record)", temp_unit_lab(unit)); xsuf <- temp_unit_lab(unit) }
     tcom <- if ("t_used" %in% names(g)) g$t_used[1] else NA
-    metric <- input$gradMetric %||% "index"
+    metric <- input$gradMetric %||% "rarefied"
+    is_log <- identical(metric, "index")   # the activity index spans ~3,000x across sites — log it so the median band stays legible
     yc <- switch(metric,
       index    = list(col = "mos_per_tn", lab = "Activity index (mosquitoes / trap-night)"),
       rarefied = list(col = "S_rare",     lab = sprintf("Species richness (rarefied to %s trap-nights)", ifelse(is.na(tcom), "equal", tcom))),
@@ -470,10 +490,11 @@ server <- function(input, output, session) {
       hill1    = list(col = "hill_q1",    lab = "Common-species diversity (Hill q1)"),
       list(col = "mos_per_tn", lab = "Activity index (mosquitoes / trap-night)"))
     if (!yc$col %in% names(g)) yc <- list(col = "taxa", lab = "Species richness (observed)")
+    if (is_log) yc$lab <- paste0(yc$lab, " · log scale")
     g$xx <- suppressWarnings(as.numeric(g[[xcol]])); g$yy <- suppressWarnings(as.numeric(g[[yc$col]]))
     if (identical(xvar, "temp")) g$xx <- temp_val(g$xx, unit)
     g$eff <- suppressWarnings(as.numeric(g$trap_nights %||% g$collections)); g$eff[is.na(g$eff)] <- 1
-    g <- g[is.finite(g$xx) & is.finite(g$yy), ]; if (!nrow(g)) return(note_plot("No sites with this combination", "\U0001F30D"))
+    g <- g[is.finite(g$xx) & is.finite(g$yy) & (!is_log | g$yy > 0), ]; if (!nrow(g)) return(note_plot("No sites with this combination", "\U0001F30D"))
     g$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b>", g$site, " · ", g$name, "</b><br/>",
       "<em>", g$biome_lab, " · ", g$state, "</em><br/>",
       "<span class='smt-pin-stats'>", temp_disp(g$warm_temp_c, unit), " warm-season · ",
@@ -507,7 +528,7 @@ server <- function(input, output, session) {
       list(text = sprintf("Spearman ρ = %.2f%s · space-for-time (46 places, not one site warming), correlational, confounded by biome &amp; latitude", ifelse(is.na(rho), 0, rho), ci_str),
            x = 0, y = 1.075, xref = "paper", yref = "paper", showarrow = FALSE, xanchor = "left", font = list(color = muted, size = 10.5)))
     p %>% plotly_theme() %>% plotly::layout(xaxis = list(title = list(text = xlab, standoff = 10)),
-      yaxis = list(title = yc$lab, rangemode = "tozero"),
+      yaxis = list(title = yc$lab, type = if (is_log) "log" else "linear", rangemode = if (is_log) "normal" else "tozero"),
       annotations = ann, hovermode = "closest", margin = list(l = 60, r = 30, t = 96, b = 52))
   })
 
