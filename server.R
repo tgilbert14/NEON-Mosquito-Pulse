@@ -61,7 +61,19 @@ server <- function(input, output, session) {
     b <- load_site_bundle(site); if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That site isn't bundled.", type="error"); return() }
     row <- site_table[site_table$site==site,]; ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site)) }
   observeEvent(input$loadBtn, load_site(input$site)); observeEvent(input$pickSite, load_site(input$pickSite))
-  observeEvent(input$demoBtn, ingest(load_demo(), DEMO_META$label, is_demo=TRUE)); observeEvent(input$demoBtn2, ingest(load_demo(), DEMO_META$label, is_demo=TRUE))
+  # v2 flow: the Santa Rita demo path was removed — users pick a real site on the
+  # map, the Browse-all list, or the by-name select panel. The demoBtn / demoBtn2
+  # inputs and their observers are gone with it.
+
+  # "Change site" (in the hero band) -> back to the picker-map landing
+  observeEvent(input$changeSite, {
+    rv$obs <- NULL; rv$traps <- NULL; rv$board <- NULL; rv$tn <- 0; rv$nocc <- 0
+    rv$effw <- NULL; rv$label <- NULL; rv$site <- NULL; rv$sp <- NULL; rv$grid <- NULL
+    shinyjs::hide("mainTabsWrap"); shinyjs::hide("spPickerWrap"); shinyjs::show("splash")
+    # the picker map was hidden while a site was loaded; nudge it to recompute
+    # size now that it's visible again, so it never paints blank/grey on return
+    session$sendCustomMessage("kickMaps", list())
+  })
 
   pick_species <- function(sci, navigate=FALSE){ if (is.null(sci)||is.na(sci)||sci=="") return()
     if (is.null(rv$board) || !(sci %in% rv$board$scientificName)) return()
@@ -81,7 +93,10 @@ server <- function(input, output, session) {
       div(class="hs-icon", bs_icon(icon)),
       div(div(class="hs-v count-up", `data-target`=v, `data-suffix`=suf, "0"),
           div(class="hs-l", l, if (!is.null(info)) info)))
-    div(class="hero-band", div(class="hero-title", bs_icon("broadcast"), tags$b(rv$label)),
+    div(class="hero-band",
+      div(class="hero-title", bs_icon("broadcast"), tags$b(rv$label),
+        actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " change site"), class = "hero-change"),
+        downloadLink("reportCsv", tagList(bs_icon("file-earmark-arrow-down"), " report"), class = "hero-report")),
       div(class="hero-grid",
         hero(sv$n_taxa, "species", icon="bug-fill", tone="navy",
           info=info_pop("Species", p("The number of different mosquito species ", tags$b("caught"), " here across all years. CO2 traps miss day-active and rare species, so the true total is higher (see the Chao2 estimate)."))),
@@ -291,7 +306,7 @@ server <- function(input, output, session) {
   })
   output$spCardSlot <- renderUI({
     if (is.null(rv$sp)) return(div(class="qc-empty", div(class="qc-empty-icon","\U0001F99F"), h4("Tap a species to see its card"),
-      p("Tap a dot above and choose “Open species profile”, or pick a species in the sidebar.")))
+      p("Tap a dot above and choose “Open species profile”, or use the species picker above the tabs.")))
     r <- rv$board[rv$board$scientificName == rv$sp,]; if (!nrow(r)) return(NULL)
     div(class="lab-sel", span(class="ls-emoji","\U0001F9EC"),
       div(class="ls-body", div(class="ls-id", tags$b(em(r$scientificName)), sprintf(" · %.2f / trap-night · %.0f%% of nights", r$index, r$ubiquity)),
@@ -321,7 +336,7 @@ server <- function(input, output, session) {
 
   output$speciesProfile <- renderUI({
     if (is.null(rv$sp)) return(div(class="qc-empty", div(class="qc-empty-icon","\U0001F99F"), h4("Pick a species to open its profile"),
-      p("Use the Swarm Board (tap a dot → “Open species profile”) or the sidebar picker.")))
+      p("Use the Swarm Board (tap a dot → “Open species profile”) or the species picker above the tabs.")))
     r <- rv$board[rv$board$scientificName == rv$sp,]; req(nrow(r)==1)
     tile <- function(v,l) div(class="qc-tile", div(class="qc-tile-v", v), div(class="qc-tile-l", l))
     qf <- qc()$flags
@@ -546,6 +561,42 @@ server <- function(input, output, session) {
       utils::write.csv(out, file, row.names = FALSE, na = "") },
     contentType = "text/csv")
 
+  # ---- Site report card (top-bar "report" download) -------------------------
+  # The v2 flow requires a Report on every app. This emits a tidy one-row-per-
+  # metric site summary CSV — the same headline numbers the hero band, the
+  # insights, and the Chao2 banner are built from, so the export reproduces what
+  # the screen says. (No PDF path exists in this app; a well-formed CSV stands in.)
+  output$reportCsv <- downloadHandler(
+    filename = function() sprintf("NEON-Mosquito_site-report_%s_%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      if (is.null(rv$obs)) { utils::write.csv(data.frame(note = "No site loaded."), file, row.names = FALSE); return() }
+      sv <- site_vectors(rv$obs, rv$nocc, rv$tn, rv$effw, if (!is.null(rv$traps)) nrow(rv$traps) else NA)
+      ch <- chao2_collections(rv$obs, rv$nocc)
+      gs <- genus_share(rv$obs)
+      yrs <- suppressWarnings(range(rv$obs$year, na.rm = TRUE))
+      yr_lab <- if (all(is.finite(yrs))) { if (yrs[1] == yrs[2]) as.character(yrs[1]) else sprintf("%d–%d", yrs[1], yrs[2]) } else NA_character_
+      pk <- pulse_phenology(rv$obs, rv$effw)
+      peak_wk <- if (!is.null(pk) && nrow(pk)) pk$week[which.max(pk$index)] else NA_integer_
+      m <- function(metric, value, note = "") data.frame(metric = metric, value = as.character(value), note = note, stringsAsFactors = FALSE)
+      rows <- list(
+        m("site", rv$site %||% NA, "NEON site code"),
+        m("site_label", rv$label %||% NA, ""),
+        m("years_sampled", yr_lab, ""),
+        m("species_caught", if (!is.null(sv)) sv$n_taxa else NA, "distinct species in CO2-trap catch"),
+        m("activity_index_per_trap_night", if (!is.null(sv)) sv$index else NA, "within-site activity index, not a population"),
+        m("pct_female", if (!is.null(sv)) sv$pct_female else NA, "share of sexed catch that was female (CO2 traps select females)"),
+        m("culex_share_pct", if (!is.null(sv)) sv$culex_share else NA, "Culex (West Nile group) share of catch — activity, not infection"),
+        m("trap_nights", if (!is.null(sv)) sv$trap_nights else NA, "total effort (trapHours / 24)"),
+        m("collections", if (!is.null(sv)) sv$n_collections else NA, "collection occasions (trap-nights sampled)"),
+        m("most_active_species", if (!is.null(sv)) sv$top else NA, ""),
+        m("peak_activity_week", peak_wk, "ISO week of the year of peak activity"),
+        m("top_genus", if (!is.null(gs) && nrow(gs)) sprintf("%s (%.0f%%)", gs$genus[1], gs$share[1]) else NA, ""),
+        if (!is.null(ch)) m("chao2_estimated_richness", round(ch$chao2), sprintf("incidence-based minimum estimate (S_obs=%d)", ch$S_obs)) else NULL)
+      out <- do.call(rbind, Filter(Negate(is.null), rows))
+      if (isTRUE(ANY_SYNTHETIC)) out <- rbind(out, m("DATA_NOTE", "SYNTHETIC PLACEHOLDER", "preview build — not measurements"))
+      utils::write.csv(out, file, row.names = FALSE, na = "") },
+    contentType = "text/csv")
+
   # ---- About + help ---------------------------------------------------------
   output$aboutPanel <- renderUI({
     div(class="about-wrap",
@@ -567,7 +618,7 @@ server <- function(input, output, session) {
   })
   observeEvent(input$help, showModal(modalDialog(easyClose=TRUE, title=tagList(bs_icon("question-circle"), " How it works"),
     tags$ul(
-      tags$li(HTML("Pick a <b>site</b> (or open the Santa Rita desert demo).")),
+      tags$li(HTML("Pick a <b>site</b>: tap a dot on the map, or pick one by name in the panel below the map.")),
       tags$li(HTML("<b>The Pulse</b> · the seasonal activity curve against the monsoon, plus a Chao2 estimate of how many species use the site.")),
       tags$li(HTML("<b>Swarm Board</b> · every species by ubiquity × activity; <b>tap one</b> to pin its card, then “Open species profile”.")),
       tags$li(HTML("<b>Taxon Profile</b> · the sex split, yearly catch, data-quality flags, and downloads.")),

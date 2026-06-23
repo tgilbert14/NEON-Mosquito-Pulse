@@ -443,3 +443,87 @@ body {
 @keyframes loadSlide { 0% { left: -40%; } 100% { left: 100%; } }
 .load-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .load-bar::after { animation: none; left: 0; width: 100%; } }
+
+/* ============================================================================
+   v2 flow — sidebar removed. Slim top bar (theme + temperature + help), the
+   relocated landing select-panel (was the sidebar), and the relocated species
+   picker body block. Token-driven, so both light + dark inherit the nightstorm
+   accents. 44px tap targets throughout; stacks on mobile.
+   ========================================================================== */
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 8px 14px; margin: 2px 0 6px;
+  border-bottom: 1px solid var(--line);
+}
+.top-bar-brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.top-bar-brand .tb-mark { font-size: 22px; line-height: 1; flex: none; }
+.top-bar-brand .tb-title { font-weight: 800; font-size: 15px; color: var(--violet);
+  letter-spacing: .2px; white-space: nowrap; }
+.top-bar-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.top-bar-actions .tb-help { min-height: 44px; display: inline-flex; align-items: center; font-weight: 700; }
+.tb-theme, .tb-toggle { display: flex; align-items: center; gap: 6px; }
+.tb-theme-lab, .tb-toggle-lab { color: var(--muted); font-size: 15px; display: inline-flex; align-items: center; }
+/* keep the dark-mode switch + the temperature radios comfortable tap targets,
+   and reset the Shiny block layout so they sit inline in the bar */
+.tb-theme .form-check, .tb-theme bslib-input-dark-mode,
+.tb-toggle .shiny-input-container { min-height: 44px; display: inline-flex; align-items: center; margin: 0; }
+.tb-toggle .shiny-input-container .control-label { display: none; }
+.tb-toggle .radio-inline { min-height: 44px; display: inline-flex; align-items: center; margin: 0 0 0 8px; color: var(--ink); }
+@media (max-width: 560px) {
+  .top-bar { padding: 7px 10px; }
+  .top-bar-brand .tb-title { font-size: 14px; }
+  .top-bar-actions { gap: 10px; }
+  .top-bar-actions .tb-help .bi + * { display: none; } /* icon-only help on tiny screens */
+}
+
+/* ---- relocated site-select panel (was the sidebar) -------------------- */
+.select-panel {
+  max-width: 880px; margin: 14px auto 8px; text-align: left;
+  background: var(--bg); border: 1px solid var(--line);
+  border-left: 4px solid var(--violet); border-radius: 14px;
+  padding: 16px 18px; box-shadow: 0 4px 16px var(--shadow);
+}
+[data-bs-theme="dark"] .select-panel {
+  background: linear-gradient(180deg, #1d1638 0%, var(--paper) 100%);
+}
+.select-panel .sp-head { font-weight: 700; color: var(--violet); font-size: 13.5px;
+  display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+[data-bs-theme="dark"] .select-panel .sp-head { color: var(--lime); }
+.select-panel .sp-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.select-panel .sp-field { flex: 1 1 200px; min-width: 170px; }
+.select-panel .sp-field .form-group,
+.select-panel .sp-field .shiny-input-container { margin-bottom: 0; width: 100%; }
+.select-panel label, .select-panel .control-label { color: var(--ink); font-weight: 600; font-size: 13px; }
+.select-panel .sp-field .form-control,
+.select-panel .sp-field .form-select,
+.select-panel .sp-field .selectize-input { min-height: 44px; }
+.select-panel .sp-load { width: 100%; min-height: 48px; margin-top: 12px; }
+.select-panel .site-bio { margin: 12px 0 4px; }
+@media (max-width: 560px) {
+  .select-panel { padding: 14px 13px; }
+  .select-panel .sp-row { gap: 10px; }
+  .select-panel .sp-field { flex: 1 1 100%; min-width: 0; }
+}
+
+/* ---- relocated "Open a species profile" body block (was in the sidebar) -- */
+.indiv-picker-wrap {
+  max-width: 1040px; margin: 8px auto 0; padding: 12px 16px;
+  background: var(--paper); border: 1px solid var(--line);
+  border-left: 4px solid var(--amber, var(--gold)); border-radius: 12px;
+}
+.indiv-picker-wrap .ipw-row { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+.indiv-picker-wrap .ipw-sel { flex: 1 1 320px; min-width: 220px; }
+.indiv-picker-wrap .ipw-sel .form-group,
+.indiv-picker-wrap .ipw-sel .shiny-input-container { margin-bottom: 0; width: 100%; }
+.indiv-picker-wrap label, .indiv-picker-wrap .control-label { color: var(--ink); font-weight: 600; font-size: 13px; }
+.indiv-picker-wrap .ipw-sel .selectize-input { min-height: 44px; }
+.indiv-picker-wrap .ipw-surprise { min-height: 44px; white-space: nowrap; font-weight: 700; }
+@media (max-width: 560px) {
+  .indiv-picker-wrap .ipw-sel, .indiv-picker-wrap .ipw-surprise { flex: 1 1 100%; min-width: 0; }
+  .indiv-picker-wrap .ipw-surprise { width: 100%; }
+}
+
+/* the hero band's change-site + report controls sit inline after the title */
+.hero-title { flex-wrap: wrap; }
+.hero-title .hero-change, .hero-title .hero-report { margin-left: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.hero-title .hero-report { margin-left: 10px; }

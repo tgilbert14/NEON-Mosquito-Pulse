@@ -1,7 +1,13 @@
 # ===========================================================================
 # NEON Mosquito Pulse — ui.R
+# v2 flow: the sidebar is gone. The national picker map IS the way to select a
+# site; the state/site selectors were relocated onto the landing (a .select-panel
+# beside the map, SAME input ids). A slim .top-bar holds theme + temperature +
+# How-it-works. The loaded view's hero band carries a "Change site" control and a
+# "Report" download. The Santa Rita demo CTAs were removed — users pick a real
+# site on the map or the Browse-all list.
 # ===========================================================================
-ui <- bslib::page_sidebar(
+ui <- bslib::page_fillable(
   theme = app_theme, title = NULL,
   window_title = "NEON Mosquito Pulse", fillable = FALSE,
   tags$head(
@@ -18,30 +24,25 @@ ui <- bslib::page_sidebar(
     tags$script(src = asset_url("pincards.js"))
   ),
   useShinyjs(),
-  sidebar = sidebar(
-    width = 320, class = "control-deck",
-    div(class = "brand", div(class = "brand-mark", "\U0001F99F"),
-      div(div(class = "brand-title", "Mosquito Pulse"), div(class = "brand-sub", "NEON field observatory"))),
-    selectInput("stateSel", label = tagList(bs_icon("geo-alt-fill"), " 1 · Pick a state"), choices = NULL, width = "100%"),
-    selectInput("site", label = tagList(bs_icon("pin-map-fill"), " 2 · Pick a site"), choices = NULL, width = "100%"),
-    uiOutput("siteBio"),
-    actionButton("loadBtn", tagList(bs_icon("globe-americas"), " Explore this site"),
-                 class = "btn-primary btn-lg w-100 load-btn", onclick = "smtLoadStart()"),
-    actionButton("demoBtn", tagList(bs_icon("stars"), " or open the Santa Rita demo"),
-                 class = "btn-link btn-sm w-100 reset-demo", onclick = "smtLoadStart('Santa Rita · demo dataset')"),
-    hidden(div(id = "spPickerWrap", hr(class = "deck-hr"),
-      selectizeInput("spSel", label = tagList(bs_icon("search"), " Open a species profile"), choices = NULL,
-                     options = list(placeholder = "Pick a species…")),
-      actionButton("surpriseBtn", tagList(bs_icon("dice-5-fill"), " Surprise me"), class = "btn-outline-dark btn-sm w-100"))),
-    hr(class = "deck-hr"),
-    actionButton("help", tagList(bs_icon("question-circle"), " How it works"), class = "btn-outline-dark btn-sm w-100"),
-    div(class = "theme-toggle-row", tags$span(class = "theme-toggle-lab", bs_icon("circle-half"), " Theme"),
-      input_dark_mode(id = "colorMode", mode = "light")),
-    div(class = "theme-toggle-row temp-toggle-row", tags$span(class = "theme-toggle-lab", bs_icon("thermometer-half"), " Temperature"),
-      radioButtons("tempUnit", NULL, choices = c("°F" = "F", "°C" = "C"), selected = "F", inline = TRUE)),
-    div(class = "deck-foot", bs_icon("database"), " NEON ", tags$code("DP1.10043.001"),
-      br(), tags$a(href = "https://desertdatalabs.com", target = "_blank", bs_icon("box-arrow-up-right"), " Desert Data Labs"))
+
+  # ---- persistent top bar (theme + temperature + help) -------------------
+  # The two settings that must stay reachable everywhere live here. Site
+  # selection moved to the picker map + the landing select-panel below.
+  div(class = "top-bar",
+    div(class = "top-bar-brand",
+      tags$span(class = "tb-mark", "\U0001F99F"),
+      tags$span(class = "tb-title", "Mosquito Pulse")),
+    div(class = "top-bar-actions",
+      actionButton("help", tagList(bs_icon("question-circle"), " How it works"),
+                   class = "btn-outline-dark btn-sm tb-help"),
+      div(class = "tb-toggle",
+        tags$span(class = "tb-toggle-lab", bs_icon("thermometer-half")),
+        radioButtons("tempUnit", NULL, choices = c("°F" = "F", "°C" = "C"), selected = "F", inline = TRUE)),
+      div(class = "tb-theme",
+        tags$span(class = "tb-theme-lab", bs_icon("circle-half")),
+        input_dark_mode(id = "colorMode", mode = "light")))
   ),
+
   div(id = "loadOverlay", class = "load-overlay", div(class = "load-card",
     div(class = "load-spin mascot-spin", MASCOT_CRITTER), div(class = "load-title", "Loading site data"),
     div(id = "loadSite", class = "load-site"), div(class = "load-bar"),
@@ -51,6 +52,18 @@ ui <- bslib::page_sidebar(
   else if (isTRUE(ANY_SYNTHETIC)) div(class = "synth-banner", bs_icon("exclamation-triangle-fill"),
     tags$span(HTML("<b>Preview build.</b> Numbers are representative <b>synthetic</b> mosquito catches, pending the real NEON DP1.10043.001 fetch. They show how the app reads; they are not measurements."))),
   uiOutput("heroStats"),
+
+  # "Open a species profile" picker — was in the sidebar, now a hidden body block
+  # revealed on site load (server: shinyjs::show("spPickerWrap")). Same ids
+  # (spSel, surpriseBtn) so the server logic is untouched.
+  hidden(div(id = "spPickerWrap", class = "indiv-picker-wrap",
+    div(class = "ipw-row",
+      div(class = "ipw-sel",
+        selectizeInput("spSel", label = tagList(bs_icon("search"), " Open a species profile"), choices = NULL,
+                       width = "100%", options = list(placeholder = "Pick a species…"))),
+      actionButton("surpriseBtn", tagList(bs_icon("dice-5-fill"), " Surprise me"),
+                   class = "btn-outline-dark ipw-surprise")))),
+
   div(id = "splash",
     div(class = "splash-guide",
       div(class = "sg-bubble", "Pick a site to start!"),
@@ -59,15 +72,29 @@ ui <- bslib::page_sidebar(
     div(class = "app-hero app-hero-splash",
       h1(class = "app-title", "NEON Mosquito Pulse", span(class = "title-tag", "unofficial")),
       p(class = "app-subtitle", "When the rains come, the mosquitoes follow. Every mosquito NEON catches in its CO2 traps, how busy and how widespread, which genera, the female-skewed catch, and how the seasonal pulse rides the summer monsoon across a continent of climates. Built on CO2-trap collections (DP1.10043.001).")),
-    p(tags$b("Tap a site on the map"), " (sized by mosquito richness, coloured by biome), search the sidebar, or open the Santa Rita demo, Sonoran-desert monsoon country south of Tucson. ", tags$b("46 sites"), " from desert washes to arctic tundra."),
+    p(tags$b("Tap a site on the map"), " (sized by mosquito richness, coloured by biome) to explore it, or pick one by name in the panel below the map. ", tags$b("46 sites"), " from desert washes to arctic tundra."),
     div(class = "picker-map-wrap", leafletOutput("nationalPicker", height = "440px")),
+
+    # ---- relocated select panel (was the sidebar) ----------------------
+    # Same input ids the server's selection + load path depend on (stateSel,
+    # site, loadBtn). Tapping a dot is the primary path; this panel is the
+    # by-name fallback. No date window — bundles load whole for this app.
+    div(class = "select-panel",
+      div(class = "sp-head", bs_icon("sliders"), " Or pick a site by name"),
+      div(class = "sp-row",
+        div(class = "sp-field",
+          selectInput("stateSel", label = tagList(bs_icon("geo-alt-fill"), " State"), choices = NULL, width = "100%")),
+        div(class = "sp-field",
+          selectInput("site", label = tagList(bs_icon("pin-map-fill"), " Site"), choices = NULL, width = "100%"))),
+      uiOutput("siteBio"),
+      actionButton("loadBtn", tagList(bs_icon("globe-americas"), " Explore this site"),
+                   class = "btn-primary btn-lg load-btn sp-load", onclick = "smtLoadStart()")),
+
     tags$details(class = "site-browse",
       tags$summary(class = "site-browse-summary",
         tags$span(class = "sbs-label", bs_icon("list-ul"), " Browse all 46 sites as a list"),
         tags$span(class = "sbs-chevron", bs_icon("chevron-down"))),
-      div(class = "site-browse-body", uiOutput("siteCards"))),
-    div(class = "picker-actions", actionButton("demoBtn2", tagList(bs_icon("stars"), " Open the Santa Rita demo"),
-      class = "btn-primary btn-lg", onclick = "smtLoadStart('Santa Rita · demo dataset')")))),
+      div(class = "site-browse-body", uiOutput("siteCards"))))),
   div(id = "mainTabsWrap", class = "main-tabs-wrap",
     div(class = "hero-caveat", bs_icon("activity"),
       tags$span(HTML("Counts are an <b>activity index</b> (mosquitoes per trap-night), not a population. CO2 traps lure host-seeking <b>females</b>, so a big night means high activity, not a high headcount."))),
