@@ -250,7 +250,7 @@ mos_qc <- function(obs, sci, traps = NULL) {
   d <- species_detail(obs, sci); if (is.null(d) || !nrow(d)) return(out)
   cols <- intersect(c("scientificName","sampleID","plotID","trapID","year","collectDate","sex","count",
                       "trapHours","targetTaxaPresent","sampleCondition","nightOrDay",
-                      "subsampleWeight","totalWeight","expansionFactor","identificationQualifier"), names(d))
+                      "expansionFactor","identificationQualifier"), names(d))
   tidy <- function(rows, label) { x <- d[rows, cols, drop = FALSE]; if (!nrow(x)) return(NULL); x$flag <- label; x }
   add <- function(level, title, key, rows, detail) {
     rows <- rows[!is.na(rows)]; n <- length(rows); if (!n) return(invisible())
@@ -263,8 +263,6 @@ mos_qc <- function(obs, sci, traps = NULL) {
   cond<- if ("sampleCondition" %in% names(d)) as.character(d$sampleCondition) else rep(NA_character_, nrow(d))
   nd  <- if ("nightOrDay" %in% names(d)) tolower(as.character(d$nightOrDay)) else rep(NA_character_, nrow(d))
   ef  <- if ("expansionFactor" %in% names(d)) num(d$expansionFactor) else rep(NA_real_, nrow(d))
-  sw  <- if ("subsampleWeight" %in% names(d)) num(d$subsampleWeight) else rep(NA_real_, nrow(d))
-  tw  <- if ("totalWeight" %in% names(d)) num(d$totalWeight) else rep(NA_real_, nrow(d))
   iq  <- if ("identificationQualifier" %in% names(d)) trimws(as.character(d$identificationQualifier)) else rep("", nrow(d))
   tgt2<- if ("is_target" %in% names(d)) d$is_target else rep(TRUE, nrow(d))
 
@@ -274,11 +272,10 @@ mos_qc <- function(obs, sci, traps = NULL) {
   # 2 — catch present but targetTaxaPresent = N (the data contradicts itself)
   add("high", "Catch present, but 'no target taxa' flagged", "targettaxa", which(tgt %in% "N" & is.finite(cnt) & cnt > 0),
       "The trapping record says no mosquitoes were present, yet identified mosquitoes were counted from it. One of the two is wrong; verify before trusting the count.")
-  # 3 — large subsample expansion OR weights missing (a few counted scaled to hundreds = wide uncertainty)
+  # 3 — large subsample expansion (a few counted scaled to hundreds = wide uncertainty)
   big <- which(is.finite(ef) & ef > 10)
-  missw <- which((is.na(sw) | is.na(tw)) & is.finite(cnt) & cnt > 0 & is.finite(ef) & ef > 1)
-  add("warn", "Large subsample expansion / missing weights", "expansion", unique(c(big, missw)),
-      "A weighed subsample was scaled up to the whole trap by more than 10x, or the scaling weights are missing. The estimated total carries wide uncertainty; the count is an estimate, not a tally.")
+  add("warn", "Large subsample expansion", "expansion", big,
+      "Estimated count extrapolated from a small sorted subsample (expansion factor > 10x) — treat the abundance as approximate.")
   # 4 — compromised sampleCondition
   add("warn", "Compromised sample condition", "condition", which(!is.na(cond) & nzchar(cond) & !(cond %in% CLEAN_CONDITION)),
       "The sample was logged as damaged, spilled, moldy, or otherwise compromised, so its counts may be undercounts. Worth confirming before trusting them.")

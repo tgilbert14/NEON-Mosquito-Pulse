@@ -98,14 +98,22 @@ jobs:
         run: |
           Rscript scripts/build_climate.R
           Rscript scripts/build_cross_site.R
-          Rscript scripts/write_manifest.R
+
+      # Rebuild the bundled "Search the network" index from the committed bundles +
+      # site_index so the Search tab never goes stale. Runs AFTER the bundle/cross-site
+      # rebuild and BEFORE write_manifest (manifest stays check-only below).
+      - name: Rebuild the search index
+        run: Rscript scripts/build_search_index.R
+
+      - name: Regenerate deploy manifest
+        run: Rscript scripts/write_manifest.R
 
       # Push the refreshed data straight to master -> Connect Cloud re-publishes.
       - name: Commit & push refreshed data
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/sites data/env data/site_index.rds data/site_climate.rds data/site_month_clim.rds data/cross_site.rds manifest.json data-sample 2>/dev/null || true
+          git add data/sites data/env data/site_index.rds data/site_climate.rds data/site_month_clim.rds data/cross_site.rds data/search_index.rds manifest.json data-sample 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No data changes — nothing to push."
           else
