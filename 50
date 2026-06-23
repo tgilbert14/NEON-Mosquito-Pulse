@@ -1,0 +1,47 @@
+== Culex tarsalis sites ==
+    site activity_index ubiquity year_min year_max
+831 DCFS         34.895     39.7     2017     2024
+832 WOOD         30.417     37.5     2014     2024
+833 STER         16.218     40.7     2014     2024
+834 NOGP         15.036     34.1     2016     2024
+835 KONA         13.578     50.9     2017     2024
+
+== Culex share  ==
+   site culex_share mos_per_tn
+10 DELA        31.5     536.17
+11 DSNY        51.7    1651.14
+13 GUAN        31.8      48.75
+19 KONZ        36.8      14.97
+20 LAJA        58.5      45.18
+21 LENO        53.4     927.41
+26 OAES        30.4      46.65
+28 ORNL        76.1       9.16
+29 OSBS        58.3     425.20
+31 SCBI        40.2       1.43
+32 SERC        73.8      87.06
+37 STER        57.0      28.49
+
+== activity index  /tn ==
+   site mos_per_tn culex_share
+2  BARR     107.90         0.0
+5  BONA     661.97         0.0
+8  DCFS     295.15        11.9
+9  DEJU      91.64         0.0
+10 DELA     536.17        31.5
+11 DSNY    1651.14        51.7
+14 HARV     238.37         0.0
+15 HEAL     130.85         0.0
+16 JERC      97.70         9.5
+18 KONA     102.56        26.5
+21 LENO     927.41        53.4
+24 NIWO      65.75         0.0
+25 NOGP     105.44        14.5
+29 OSBS     425.20        58.3
+32 SERC      87.06        73.8
+36 STEI    2460.79         0.1
+39 TEAK      77.11         0.5
+40 TOOL     869.68         0.0
+41 TREE     471.08         0.8
+42 UKFS      65.23        24.5
+43 UNDE    2159.21         0.1
+44 WOOD     611.34         5.0

@@ -148,6 +148,12 @@ SITE_CLIMATE    <- tryCatch(readRDS("data/site_climate.rds"),    error = functio
 SITE_MONTH_CLIM <- tryCatch(readRDS("data/site_month_clim.rds"), error = function(e) NULL)
 CROSS_SITE      <- tryCatch(readRDS("data/cross_site.rds"),      error = function(e) NULL)
 
+# Search-the-network index — one small precomputed .rds (scripts/build_search_index.R),
+# loaded once at boot like site_index, filtered in memory by the Search tab (no live
+# fetch). list(taxa = one row per species x site with the within-site activity index +
+# ubiquity + years; sites = site_index + culex_share for the threshold query).
+SEARCH_INDEX <- tryCatch(readRDS("data/search_index.rds"), error = function(e) NULL)
+
 # One row per site for the "Across the continent" tab: climate + community
 # metrics + biome, joined once at boot. NULL-safe so a missing precompute
 # degrades the tab, never crashes boot.

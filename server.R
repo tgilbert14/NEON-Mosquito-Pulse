@@ -86,6 +86,84 @@ server <- function(input, output, session) {
   observeEvent(input$goMap, nav_select("tabs","map"))
   observeEvent(input$goClimate, nav_select("tabs","climate"))
 
+  # ---- Search the network ------------------------------------------------
+  # Filters the small bundled SEARCH_INDEX in memory (no live fetch). Both
+  # modes share the app's instant load path: a "Go to site" cell fires the
+  # SAME pickSite input the picker map uses, so the row loads from the bundle
+  # and lands on Overview, identical to every other site jump.
+  go_cell <- function(site) sprintf(
+    "<a href='#' class='search-go' onclick=\"smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;\">\U0001F99F Go to site &rarr;</a>",
+    site, site)
+  dt_opts <- list(pageLength = 12, dom = "tip", scrollX = TRUE, columnDefs = list(list(className = "dt-body-right", targets = "_all")))
+
+  # populate the taxon autocomplete from the index, Culex flagged
+  observe({
+    if (is.null(SEARCH_INDEX) || is.null(SEARCH_INDEX$taxa)) return()
+    tx <- SEARCH_INDEX$taxa
+    nm <- sort(unique(tx$scientificName))
+    cu <- unique(tx$scientificName[tx$is_culex %in% TRUE])
+    lab <- ifelse(nm %in% cu, paste0(nm, "  \U2691 Culex"), nm)
+    updateSelectizeInput(session, "searchTaxon", choices = c("Pick a species…" = "", setNames(nm, lab)), selected = "", server = TRUE)
+  })
+
+  searchTaxonRows <- reactive({
+    req(SEARCH_INDEX, input$searchTaxon); validate(need(nzchar(input$searchTaxon), ""))
+    d <- SEARCH_INDEX$taxa[SEARCH_INDEX$taxa$scientificName == input$searchTaxon, , drop = FALSE]
+    d[order(-d$activity_index), , drop = FALSE]
+  })
+  output$searchTaxonCaption <- renderUI({
+    if (is.null(SEARCH_INDEX)) return(span(class = "muted", "Search index not built yet. Run scripts/build_search_index.R."))
+    if (!nzchar(input$searchTaxon %||% "")) return(span(class = "muted", "Pick a species to see every site where it has been caught."))
+    d <- searchTaxonRows(); ns <- nrow(SEARCH_INDEX$sites)
+    div(span(class = "search-count", sprintf("%d of %d sites", nrow(d), ns)),
+        span(class = "muted", " · activity index is a within-site index (catch per trap-night), not an absolute ranking between sites"))
+  })
+  output$searchTaxonTbl <- DT::renderDT({
+    d <- searchTaxonRows(); validate(need(nrow(d) > 0, "No bundled site has caught this species."))
+    nm <- neon_sites$name[match(d$site, neon_sites$site)]
+    out <- data.frame(
+      Site = d$site, Name = nm,
+      `Activity index (per trap-night)` = d$activity_index,
+      `Ubiquity (%)` = d$ubiquity,
+      `Total caught` = d$total,
+      Years = ifelse(is.finite(d$year_min) & d$year_min == d$year_max, as.character(d$year_min),
+                     paste0(d$year_min, "–", d$year_max)),
+      ` ` = vapply(d$site, go_cell, character(1)),
+      check.names = FALSE, stringsAsFactors = FALSE)
+    DT::datatable(out, escape = FALSE, rownames = FALSE, selection = "none", options = dt_opts) %>%
+      DT::formatRound("Activity index (per trap-night)", 3)
+  })
+
+  searchThreshRows <- reactive({
+    req(SEARCH_INDEX, SEARCH_INDEX$sites)
+    s <- SEARCH_INDEX$sites; v <- suppressWarnings(as.numeric(input$threshVal %||% 0)); if (is.na(v)) v <- 0
+    if (identical(input$threshMetric, "index")) s[which((s$mos_per_tn %||% NA) > v), , drop = FALSE]
+    else s[which((s$culex_share %||% NA) > v), , drop = FALSE]
+  })
+  output$searchThreshCaption <- renderUI({
+    if (is.null(SEARCH_INDEX)) return(span(class = "muted", "Search index not built yet. Run scripts/build_search_index.R."))
+    s <- searchThreshRows(); ns <- nrow(SEARCH_INDEX$sites); v <- input$threshVal %||% 0
+    lab <- if (identical(input$threshMetric, "index")) sprintf("activity index over %s per trap-night", v)
+           else sprintf("Culex share over %s%%", v)
+    div(span(class = "search-count", sprintf("%d of %d sites", nrow(s), ns)),
+        span(class = "muted", sprintf(" · %s · these are within-site indices, not an absolute ranking", lab)))
+  })
+  output$searchThreshTbl <- DT::renderDT({
+    s <- searchThreshRows()
+    validate(need(nrow(s) > 0, "No site passes that threshold. Lower the cutoff."))
+    nm <- neon_sites$name[match(s$site, neon_sites$site)]
+    s <- s[order(if (identical(input$threshMetric, "index")) -s$mos_per_tn else -s$culex_share), , drop = FALSE]
+    nm <- neon_sites$name[match(s$site, neon_sites$site)]
+    out <- data.frame(
+      Site = s$site, Name = nm,
+      `Culex share (%)` = s$culex_share,
+      `Activity index (per trap-night)` = s$mos_per_tn,
+      Species = s$taxa, `Trap-nights` = s$trap_nights,
+      ` ` = vapply(s$site, go_cell, character(1)),
+      check.names = FALSE, stringsAsFactors = FALSE)
+    DT::datatable(out, escape = FALSE, rownames = FALSE, selection = "none", options = dt_opts)
+  })
+
   # ---- hero ----
   output$heroStats <- renderUI({
     sv <- site_vectors(rv$obs, rv$nocc, rv$tn, rv$effw, if (!is.null(rv$traps)) nrow(rv$traps) else NA); if (is.null(sv)) return(NULL)
@@ -321,7 +399,7 @@ server <- function(input, output, session) {
     bar_col <- genus_col((rv$board$genus[rv$board$scientificName == sci])[1] %||% "other")
     plot_ly(my, x=~year, y=~mosquitoes, type="bar", marker=list(color=bar_col),
             hovertemplate="%{x}<br>%{y} caught (est.)<extra></extra>") %>%
-      plotly_theme(legend=FALSE) %>% plotly::layout(xaxis=list(title="Year"), yaxis=list(title="Mosquitoes (est.)"), margin=list(l=46,r=10,t=10,b=40))
+      plotly_theme(legend=FALSE) %>% plotly::layout(xaxis=list(title="Year", dtick=1, tickformat="d"), yaxis=list(title="Mosquitoes (est.)"), margin=list(l=46,r=10,t=10,b=40))
   })
   output$sexPlot <- renderPlotly({
     sci <- rv$sp; req(sci); sx <- sex_split(rv$obs, sci); if (is.null(sx) || !sum(sx$count)) return(note_plot("No sex data"))

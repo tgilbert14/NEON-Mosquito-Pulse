@@ -527,3 +527,11 @@ body {
 .hero-title { flex-wrap: wrap; }
 .hero-title .hero-change, .hero-title .hero-report { margin-left: 14px; display: inline-flex; align-items: center; gap: 4px; }
 .hero-title .hero-report { margin-left: 10px; }
+
+/* ---- Search the network -------------------------------------------------- */
+.search-caption { margin: 4px 0 12px; font-size: 12.5px; line-height: 1.5; }
+.search-count { font-weight: 700; color: var(--violet, #5e39c4); margin-right: 4px; }
+[data-bs-theme="dark"] .search-count { color: #b8a4f0; }
+a.search-go { font-weight: 700; color: #5e39c4; text-decoration: none; white-space: nowrap; }
+a.search-go:hover { text-decoration: underline; }
+[data-bs-theme="dark"] a.search-go { color: #b8a4f0; }

@@ -3216,6 +3216,9 @@
     "data/env/YELL.rds": {
       "checksum": "09eaf8b677d24ddcc48b6fa0e23e6040"
     },
+    "data/search_index.rds": {
+      "checksum": "82da98a424d91f928734741494087da4"
+    },
     "data/site_climate.rds": {
       "checksum": "9ee2709a637e37a3ece63bb08b06fec5"
     },
@@ -3364,7 +3367,7 @@
       "checksum": "d6d11c6097fff2bd7d192452c55c223b"
     },
     "global.R": {
-      "checksum": "65633d07d8fa48ab48ace948cfdd3d07"
+      "checksum": "d969f46e6652ece26392724e3c07a1f6"
     },
     "R/mos_helpers.R": {
       "checksum": "a7867de9d17d35031d0d15fa9a10caa1"
@@ -3373,16 +3376,16 @@
       "checksum": "876fb1ddf81b732313aa763ce1fa6023"
     },
     "server.R": {
-      "checksum": "22b6dbaaea4d44a858d482a632286ce1"
+      "checksum": "2a3e90ee50a4d503783e584dd7e979e0"
     },
     "ui.R": {
-      "checksum": "6b88a8d6caff48d0a7ee4f72b1530825"
+      "checksum": "aea6f926d249c4b42a30f82310c8689b"
     },
     "www/app.js": {
-      "checksum": "ba0447753535bf54fe2a7b58f9aad9f4"
+      "checksum": "25c365c2bf38640ca3076527bfa3baa3"
     },
     "www/mosquito.css": {
-      "checksum": "5acf13e45169d4e3595f1481a7ccb674"
+      "checksum": "bb8bebb271ddc55c934995b6a9d9ddbb"
     },
     "www/pincards.js": {
       "checksum": "cfa53fb7b58f6e42c1c390da4ab15d24"
