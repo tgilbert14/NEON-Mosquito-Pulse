@@ -353,7 +353,11 @@ body {
   transform: translateY(-4px);
   box-shadow: 0 18px 36px rgba(0,0,0,.45), 0 0 0 1px rgba(184,242,74,.30) !important;
 }
-.hero-band { margin: 4px 0 14px; }
+/* flex:0 0 auto is defensive: never let the hero band be the page-fill flex
+   child that shrinks. It can't crush today (overflow:visible floors its min-size
+   at content) but would if the cascade's overflow:hidden command-band style is
+   ever ported here. See NEON-Driver-Cascade/www/cascade.css for the full story. */
+.hero-band { flex: 0 0 auto; margin: 4px 0 14px; }
 .hero-title { font-weight: 700; color: var(--violet); font-size: 17px; display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .hero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .hero-stat { display: flex; gap: 12px; align-items: center; border-radius: 12px; padding: 12px 16px; }
