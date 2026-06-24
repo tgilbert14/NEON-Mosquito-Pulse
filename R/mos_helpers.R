@@ -394,5 +394,11 @@ mos_codebook <- function() {
       "Pulse CSV: last month of the site's summer-monsoon window (NA where the site has no NEON gauge / no summer-rain peak)."),
     stringsAsFactors = FALSE)
 
-  rbind(base, grid, cross, pulse)
+  # Provenance / license row (NEON CC BY 4.0), first so it's visible on open.
+  lic <- data.frame(
+    column = "_source",
+    units  = "license",
+    description = "Source: NEON DP1.10043.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
+    stringsAsFactors = FALSE)
+  rbind(lic, base, grid, cross, pulse)
 }
