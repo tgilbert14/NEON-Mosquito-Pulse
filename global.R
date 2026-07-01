@@ -88,10 +88,21 @@ SEX_COL <- c(F = "#7c52e0", M = "#3fb6c9", U = "#9aa0b4")
 sex_col <- function(s) { s <- toupper(substr(as.character(s), 1, 1)); out <- unname(SEX_COL[s]); ifelse(is.na(out), unname(SEX_COL["U"]), out) }
 sex_lab <- c(F = "Female", M = "Male", U = "Undetermined")
 
+# Rubik is named as a PLAIN CSS font-family here (a bslib font_collection of bare
+# strings), NOT font_google("Rubik"). font_google() defaults to local = TRUE, which
+# makes bslib DOWNLOAD the font from Google and compile it into the theme AT APP
+# STARTUP. On Connect Cloud that live fetch runs on every cold start against an empty
+# cache; when Google Fonts is slow/unreachable the Sass compile blocks/fails during
+# boot -> black screen / "start-up error" (republish only re-primes the cache until the
+# next recycle). Naming the family as a string does ZERO network at boot; the real
+# Rubik glyphs are still delivered client-side by the <link> in ui.R (display=swap),
+# with a system-sans fallback. See docs/neonize-playbook.md §4.
+rubik_stack <- bslib::font_collection(
+  "Rubik", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif")
 app_theme <- bs_theme(version = 5, bg = "#fbfaff", fg = DDL$ink,
   primary = DDL$violet, secondary = DDL$amber, success = DDL$lime, info = DDL$sky,
   warning = DDL$amber, danger = "#d94f7a",
-  base_font = font_google("Rubik"), heading_font = font_google("Rubik"), "border-radius" = "10px")
+  base_font = rubik_stack, heading_font = rubik_stack, "border-radius" = "10px")
 
 asset_url <- function(path) { f <- file.path("www", path)
   v <- if (file.exists(f)) as.integer(as.numeric(file.mtime(f))) else 0L; sprintf("%s?v=%s", path, v) }
