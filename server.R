@@ -166,6 +166,7 @@ server <- function(input, output, session) {
 
   # ---- hero ----
   output$heroStats <- renderUI({
+    req(!is.null(rv$obs))
     sv <- site_vectors(rv$obs, rv$nocc, rv$tn, rv$effw, if (!is.null(rv$traps)) nrow(rv$traps) else NA); if (is.null(sv)) return(NULL)
     hero <- function(v,l,suf="",icon,tone,info=NULL) div(class=paste0("hero-stat hero-",tone),
       div(class="hs-icon", bs_icon(icon)),
@@ -207,6 +208,7 @@ server <- function(input, output, session) {
       top$vernacular %||% top$scientificName, top$index, ubi$vernacular %||% ubi$scientificName, ubi$ubiquity, nrow(brd))))
   })
   output$siteInsights <- renderUI({
+    req(!is.null(rv$obs), !is.null(rv$effort))
     brd <- rv$board
     if (is.null(brd) || !nrow(brd)) {
       valid <- rv$effort[rv$effort$valid_effort %in% TRUE,,drop=FALSE]
