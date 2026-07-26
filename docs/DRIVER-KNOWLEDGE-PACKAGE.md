@@ -47,3 +47,18 @@ Audit other sampling apps for a binary catch/absence model that lacks pending/he
 - Final manifest: R 4.5.2, 91 packages, 112 runtime files; SHA-256 `acef14509ce44347d53a99b252cd92814797df1698b5a4365c9e0ac0724cc4ce`.
 - Final exact merge CI `30213225754`, Pages `30213225369`, and production smoke `30213225753`: passed.
 - Fresh production browser session at 390 px: zero Shiny output errors before and after loading SRER, no overflow, and all 19 audited in-app interaction targets at least 44 × 44 CSS px.
+
+## Living Poster flow correction · 2026-07-26
+
+**NONE / NO DRIVER BYTE CHANGE** — Trimming the Pages cover to the approved Suite
+Living Poster V1 flow changes presentation only. The public face now stops after
+the hook, promise, one CTA, dominant artwork, and compact collapsed honesty footer;
+the full effort, expansion, and CAN/CANNOT explanation remains in the app and
+durable scientific documents. No source, opportunity, zero, estimator, bundle,
+manifest, app runtime, Driver adapter, or ecological disposition changed.
+
+Reusable suite rule: a cover can preserve the load-bearing zero/missing and claim
+boundary in one collapsed disclosure without turning the first impression into a
+methods page. Artwork-first mobile order, one Driver route, one CTA, explicit
+illustration labeling, and 44 px primary/disclosure controls remain part of the
+shared frame.

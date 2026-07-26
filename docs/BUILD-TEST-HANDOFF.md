@@ -106,3 +106,79 @@ The first production browser pass found `heroStats` and `siteInsights` in generi
 
 - **HOLD:** PUUM remains eligible throughout the mosquito app but is excluded from climate-gradient placement until an equivalent pinned climate overlay exists.
 - Next action: update the Driver Cascade register and implication backlog with this exact evidence without changing Driver release artifacts.
+
+## 2026-07-26 13:18 MST · Living Poster flow correction (America/Phoenix)
+
+### Scope and decision
+
+- User review correctly found that the Pages cover did not match the finalized
+  Small Mammal/Vegetation flow. It placed a second headline, methods lead, three
+  numbered science cards, and a two-card CAN/CANNOT block between the poster and
+  footer.
+- Decision: **NONE / NO DRIVER BYTE CHANGE**. This is a Pages presentation and
+  suite-frame correction only. No app runtime, source, bundle, opportunity state,
+  estimator, manifest, or ecological disposition changed.
+- Branch: `agent/mosquito-cover-trim`, based on clean synchronized receipt master
+  `91b4c713ebbdc717128de584273b995ec49dd622`.
+
+### Implemented
+
+- Removed the complete public methods/card layer. The page now contains one poster
+  landmark followed directly by the compact footer used by the approved reference
+  covers.
+- Aligned the visible frame to Desert Data Labs identity, one Driver route,
+  `NEON Mosquito Pulse · unofficial`, the existing hook/promise/CTA, explicit art
+  boundary, one collapsed `What am I looking at?` disclosure, Source, and Feedback.
+- Kept the load-bearing science boundary in the collapsed disclosure: supported
+  zero catches remain distinct from missed/unusable intervals, the metric remains
+  a 24-trap-hour activity index, and population/pathogen/risk/causal claims remain
+  forbidden.
+- Added a stable H1 accessible name, ink-colored footer focus rings, 44 px
+  disclosure/source/feedback targets, WebP-with-PNG-fallback picture markup,
+  high-priority asynchronous image decoding, and the approved artwork-first mobile
+  order. The `mosquito-pulse-poster-v1` production marker remains unchanged.
+- Strengthened `scripts/check_cover.mjs` so the poster must be the main landmark,
+  retain exactly one CTA and Driver route, include one compact honesty disclosure,
+  and reject reintroduced methods/truth/boundary blocks.
+
+### Validation before publication
+
+- `node --check scripts/check_cover.mjs`: PASS.
+- `node scripts/check_cover.mjs`: PASS; Pages/app assets remain local,
+  accessible, and provenance-locked.
+- `git diff --check`: PASS; stale method/card copy scan returned zero matches.
+- Fresh local browser DOM and visual QA passed at 1440×900, 390×844, and 320×800.
+  Every width had `scrollWidth == clientWidth`, one H1, one CTA, one Driver route,
+  zero H2/method/card blocks, a 52 px CTA, and a 44 px honesty control. At 390 and
+  320 the artwork leads, the CTA remains within the first viewport, and the footer
+  begins exactly at 844 and 800 CSS px respectively.
+- Desktop and 390 screenshots visually confirmed the complete artwork, readable
+  hook/promise/CTA, and compact footer rhythm. The first port of the reference
+  mobile gradient obscured this darker artwork; acceptance failed, the overlay was
+  removed at ≤700 px, and the repeated screenshot showed the full wetland/trap art.
+- `xmllint --html` was not treated as an HTML5 gate because the installed legacy
+  parser rejects standard `main`, `header`, `nav`, `figure`, `footer`, `details`,
+  and SVG elements. The live browser DOM, semantic snapshot, and executable cover
+  contract are the applicable gates.
+
+### Release/non-impact state
+
+- `docs/index.html` and the documentation/test files are outside the Connect app
+  manifest allowlist; `manifest.json` therefore remains the exact released
+  91-package/112-file family with SHA-256
+  `acef14509ce44347d53a99b252cd92814797df1698b5a4365c9e0ac0724cc4ce`.
+- Poster PNG/WebP/social-card hashes remain
+  `120e4397b5ab74c3b9c2d1636568e5904fe0268b1f4cad9a77f86941ecf14581`,
+  `aa6098780e1029cf4beb1d3afe967ac42a102e05df1c1f0afbf752520138e110`,
+  and `3ac459d280f2703ba80ed92ed31a102781601ab15e85437476f4d2239598fd11`.
+- Exact PR-head CI, merge identity, merge CI, Pages deployment, and live production
+  recheck are pending publication and must be appended in the closeout receipt.
+
+### Residual risk and next action
+
+- Browser coverage is finite; the in-app first-run poster is already concise and
+  remains deliberately unchanged to avoid a presentation-only runtime/manifest
+  churn. Its full site picker and methods belong inside the product flow.
+- Publish this candidate through a ready PR, require exact-head CI, merge, verify
+  exact master CI and Pages, append the publication receipt, then reconcile the
+  Driver suite register without changing Driver release artifacts.
