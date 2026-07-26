@@ -20,6 +20,7 @@ const requiredApp = [
   "assets/mosquito-living-poster-v1.webp",
   "Illustration · not a measurement",
   "NEON-Driver-Cascade",
+  "Skip to site picker",
 ];
 for (const value of requiredCover) if (!cover.includes(value)) throw new Error(`cover missing ${value}`);
 for (const value of requiredApp) if (!ui.includes(value)) throw new Error(`app poster missing ${value}`);

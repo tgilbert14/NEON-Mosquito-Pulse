@@ -1,5 +1,21 @@
 /* Static Living Poster: the first app screen shares the suite cover language. */
 .splash-map { max-width: none !important; padding-top: 0 !important; }
+.app-skip {
+  position: fixed;
+  z-index: 10050;
+  top: -80px;
+  left: 1rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1rem;
+  border-radius: 999px;
+  color: #10152f !important;
+  background: #f2e7c9;
+  font-weight: 850;
+  text-decoration: none !important;
+}
+.app-skip:focus { top: 1rem; outline: 3px solid #d0dc39; outline-offset: 4px; }
 .living-poster {
   position: relative;
   min-height: min(780px, calc(100svh - 68px));
@@ -60,7 +76,7 @@
   z-index: 3;
   align-self: center;
   max-width: 680px;
-  padding: clamp(4rem, 7vw, 7.5rem) 1rem clamp(4rem, 7vw, 7rem) clamp(2rem, 5vw, 5.5rem);
+  padding: clamp(6.2rem, 9vw, 8rem) 1rem clamp(4rem, 7vw, 7rem) clamp(2rem, 5vw, 5.5rem);
 }
 .lp-eyebrow {
   margin: 0 0 1.35rem;
@@ -133,7 +149,7 @@
 .picker-intro p:last-child { max-width: 650px; margin: 1rem auto 0; color: #625a78; }
 @media (max-width: 900px) {
   .living-poster { grid-template-columns: 1fr; margin-inline: -1rem; }
-  .lp-copy { padding: 4rem 1.6rem 2.2rem; }
+  .lp-copy { padding: 6.1rem 1.6rem 2.2rem; }
   .lp-art { min-height: 48svh; margin: 0; }
   .lp-art::before { background: linear-gradient(180deg,#10152f 0%,transparent 38%); }
 }
@@ -142,8 +158,12 @@
   .lp-topline { margin-inline: 1.1rem; }
   .lp-ddl { font-size: .62rem; }
   .lp-driver { font-size: .67rem; }
-  .lp-copy { padding: 3.2rem 1.1rem 1.8rem; }
+  .lp-copy { padding: 5.7rem 1.1rem 1.8rem; }
   .living-poster h1 { font-size: clamp(3.7rem,18vw,5.2rem); }
   .lp-art { min-height: 42svh; }
   .lp-art figcaption { right: .8rem; bottom: .8rem; }
+}
+@media (forced-colors: active) {
+  .living-poster,.lp-cta,.lp-driver,.app-skip { border: 2px solid ButtonText; }
+  .lp-cta,.lp-driver,.app-skip { forced-color-adjust: auto; }
 }

@@ -19,6 +19,7 @@ ui <- bslib::page_fillable(
     tags$script(src = asset_url("pincards.js"))
   ),
   useShinyjs(),
+  tags$a(class = "app-skip", href = "#site-picker", "Skip to site picker"),
 
   # ---- persistent top bar (theme + temperature + help) -------------------
   # The two settings that must stay reachable everywhere live here. Site
