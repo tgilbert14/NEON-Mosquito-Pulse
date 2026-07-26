@@ -387,8 +387,15 @@ body {
 .control-deck .bio-links-title { color: var(--lime) !important; }
 
 /* nav tab active underline -> lime */
+.nav-tabs .nav-link { min-height: 44px; display: inline-flex; align-items: center; }
 .nav-tabs .nav-link.active { border-bottom-color: var(--lime) !important; }
 .nav-tabs .nav-link.active .bi { color: var(--lime-ink); }
+
+/* Preserve the app's 44px control contract beyond the first screen. These are
+   compact visually, but their transparent hit area remains comfortable for
+   touch and switch users. */
+.info-dot { width: 44px; height: 44px; }
+.bslib-full-screen-enter { min-width: 44px; min-height: 44px; }
 
 @media (prefers-reduced-motion: reduce) {
   .app-hero::before, .brand-mark, .app-emoji, .hero-stat::before { animation: none !important; }
@@ -529,7 +536,10 @@ body {
 
 /* the hero band's change-site + report controls sit inline after the title */
 .hero-title { flex-wrap: wrap; }
-.hero-title .hero-change, .hero-title .hero-report { margin-left: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.hero-title .hero-change, .hero-title .hero-report {
+  margin-left: 14px; display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px; min-height: 44px; padding: 8px 10px;
+}
 .hero-title .hero-report { margin-left: 10px; }
 
 /* ---- Search the network -------------------------------------------------- */
