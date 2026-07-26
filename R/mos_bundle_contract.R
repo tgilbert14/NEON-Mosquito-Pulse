@@ -34,13 +34,15 @@ mos_require <- function(d, fields, table) {
   invisible(TRUE)
 }
 
-mos_is_species <- function(rank, scientific_name) {
+mos_is_species <- function(rank, scientific_name, qualifier = NULL) {
   rank <- tolower(mos_chr(rank))
   sci <- mos_chr(scientific_name)
+  qual <- if (is.null(qualifier)) rep(NA_character_, length(sci)) else tolower(mos_chr(qualifier))
   accepted <- rank %in% c("species", "subspecies")
   ambiguous <- grepl("\\bsp[.]?$", ifelse(is.na(sci), "", sci), ignore.case = TRUE) |
     grepl("/", ifelse(is.na(sci), "", sci), fixed = TRUE)
-  accepted & !ambiguous
+  uncertain <- !is.na(qual) & !(qual %in% c("na", "none", "not applicable"))
+  accepted & !ambiguous & !uncertain
 }
 
 mos_sampling_occurred <- function(x) {
@@ -124,10 +126,13 @@ mos_build_effort <- function(trapping, site) {
 
   occurred <- mos_sampling_occurred(effort$samplingImpractical)
   duration_ok <- is.finite(effort$trapHours) & effort$trapHours > 0
-  effort$valid_effort <- occurred & duration_ok & !is.na(effort$plotID) & !is.na(effort$collectDate)
+  identity_ok <- !is.na(effort$source_uid) |
+    (!is.na(effort$eventID) & !is.na(effort$plotID) & !is.na(effort$setDate) &
+       !is.na(effort$collectTimestamp) & !is.na(effort$nightOrDay))
+  effort$valid_effort <- occurred & duration_ok & identity_ok
   effort$effort_status <- ifelse(!occurred, "not_sampled",
                           ifelse(!duration_ok, "unusable_duration",
-                          ifelse(is.na(effort$plotID) | is.na(effort$collectDate), "unusable_identity", "valid_sampled")))
+                          ifelse(!identity_ok, "unusable_identity", "valid_sampled")))
   effort$effort_days <- ifelse(effort$valid_effort, effort$trapHours / 24, 0)
   effort$year <- as.integer(format(effort$collectDate, "%Y"))
   effort$week <- as.integer(format(effort$collectDate, "%U"))
@@ -174,6 +179,7 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
   genus <- mos_chr(mos_col(eligible, "genus"))
   scientific <- mos_chr(eligible$scientificName)
   taxon_rank <- mos_chr(eligible$taxonRank)
+  qualifier <- mos_chr(mos_col(eligible, "identificationQualifier"))
   obs <- data.frame(
     sampleID = mos_chr(eligible$sampleID),
     effort_id = mos_chr(eligible$effort_id),
@@ -188,7 +194,7 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
     scientificName = scientific,
     vernacularName = NA_character_,
     taxonRank = taxon_rank,
-    is_species = mos_is_species(taxon_rank, scientific),
+    is_species = mos_is_species(taxon_rank, scientific, qualifier),
     genus = ifelse(is.na(genus), sub(" .*", "", scientific), genus),
     sex = toupper(substr(mos_chr(eligible$sex), 1L, 1L)),
     nativeStatusCode = mos_chr(mos_col(eligible, "nativeStatusCode")),
@@ -200,7 +206,7 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
     sampleCondition = mos_chr(eligible$sampleCondition),
     proportionIdentified = mos_num(eligible$proportionIdentified),
     expansionFactor = mos_num(eligible$expansionFactor),
-    identificationQualifier = mos_chr(mos_col(eligible, "identificationQualifier")),
+    identificationQualifier = qualifier,
     stringsAsFactors = FALSE
   )
   obs$sex[is.na(obs$sex) | !(obs$sex %in% c("F", "M"))] <- "U"
@@ -247,6 +253,9 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
     n_traps = length(unique(valid$plotID)),
     release = release,
     product = "DP1.10043.001",
+    doi = "10.48443/rmw1-me46",
+    release_generated = "2026-01-23",
+    schema_version = "mosquito-pulse-opportunity-v1",
     metric_label = "mosquitoes per 24 trap-hours"
   )
   list(obs = tibble::as_tibble(obs), effort = tibble::as_tibble(effort),

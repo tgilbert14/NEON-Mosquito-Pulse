@@ -37,7 +37,8 @@ num <- function(x) suppressWarnings(as.numeric(x))
 vector_board <- function(obs, n_occ = NULL, trap_nights = NULL) {
   sp <- target_only(species_level_only(obs)); if (is.null(sp) || !nrow(sp)) return(NULL)
   sp$.occ <- collection_occasion(sp)   # the sampled interval occasion (occ_id), not sampleID
-  tn <- max(1, num(trap_nights %||% dplyr::n_distinct(sp$.occ)))
+  tn <- num(trap_nights %||% NA_real_)[1]
+  if (!is.finite(tn) || tn <= 0) tn <- max(1, dplyr::n_distinct(sp$.occ))
   n_occ <- max(1L, as.integer(n_occ %||% dplyr::n_distinct(collection_occasion(obs))))
   sp$.cnt <- num(sp$count)
   sp %>% dplyr::group_by(.data$scientificName) %>%
@@ -65,7 +66,8 @@ vector_board <- function(obs, n_occ = NULL, trap_nights = NULL) {
 # site headline (hero stats). index = site activity index (per 24 trap-hours).
 site_vectors <- function(obs, n_occ = NULL, trap_nights = NULL, effort_week = NULL, n_traps = NA) {
   brd <- vector_board(obs, n_occ, trap_nights)
-  tn <- max(1, num(trap_nights %||% if (nrow(obs)) dplyr::n_distinct(collection_occasion(obs)) else 0))
+  tn <- num(trap_nights %||% NA_real_)[1]
+  if (!is.finite(tn) || tn <= 0) tn <- max(1, if (nrow(obs)) dplyr::n_distinct(collection_occasion(obs)) else 0)
   all_target <- target_only(obs); all_target$.cnt <- num(all_target$count)
   fem <- if (nrow(all_target)) sum(all_target$.cnt[toupper(substr(all_target$sex, 1, 1)) == "F"], na.rm = TRUE) else 0
   mal <- if (nrow(all_target)) sum(all_target$.cnt[toupper(substr(all_target$sex, 1, 1)) == "M"], na.rm = TRUE) else 0
@@ -76,7 +78,7 @@ site_vectors <- function(obs, n_occ = NULL, trap_nights = NULL, effort_week = NU
        pct_female = if (fem + mal > 0) round(100 * fem / (fem + mal)) else NA_real_,
        culex_share = if (tot > 0) round(100 * culex / tot) else NA_real_,
        peak_week = peak_wk, n_traps = n_traps,
-       trap_nights = round(tn), n_collections = as.integer(n_occ %||% dplyr::n_distinct(obs$sampleID)),
+       effort_days = round(tn, 2), n_collections = as.integer(n_occ %||% dplyr::n_distinct(obs$sampleID)),
        top = if (is.null(brd)) "No mosquitoes detected" else brd$vernacular[which.max(brd$index)] %||% brd$scientificName[which.max(brd$index)])
 }
 
@@ -91,20 +93,23 @@ site_vectors <- function(obs, n_occ = NULL, trap_nights = NULL, effort_week = NU
 # ---------------------------------------------------------------------------
 week_of <- function(d) as.integer(format(as.Date(substr(as.character(d), 1, 10)), "%U"))
 pulse_phenology <- function(obs, effort_week = NULL) {
-  sp <- target_only(obs); if (is.null(sp) || !nrow(sp)) return(NULL)
-  if (!"week" %in% names(sp)) sp$week <- week_of(sp$collectDate)
-  sp$.cnt <- num(sp$count); sp <- sp[is.finite(sp$week), , drop = FALSE]; if (!nrow(sp)) return(NULL)
-  catch <- sp %>% dplyr::group_by(.data$year, .data$week) %>%
-    dplyr::summarise(total = sum(.data$.cnt, na.rm = TRUE), n_occ = dplyr::n_distinct(.data$sampleID), .groups = "drop")
+  sp <- target_only(obs)
+  catch <- data.frame(year = integer(0), week = integer(0), total = numeric(0), n_occ = integer(0))
+  if (!is.null(sp) && nrow(sp)) {
+    if (!"week" %in% names(sp)) sp$week <- week_of(sp$collectDate)
+    sp$.cnt <- num(sp$count); sp$.occ <- collection_occasion(sp); sp <- sp[is.finite(sp$week), , drop = FALSE]
+    if (nrow(sp)) catch <- sp %>% dplyr::group_by(.data$year, .data$week) %>%
+      dplyr::summarise(total = sum(.data$.cnt, na.rm = TRUE), n_occ = dplyr::n_distinct(.data$.occ), .groups = "drop")
+  }
   effort_col <- if (!is.null(effort_week) && "effort_days" %in% names(effort_week)) "effort_days" else "trap_nights"
   if (!is.null(effort_week) && nrow(effort_week) && effort_col %in% names(effort_week)) {
     ew <- effort_week; ew$.eff <- num(ew[[effort_col]]); ew <- ew[is.finite(ew$.eff) & ew$.eff > 0, , drop = FALSE]
     yw <- dplyr::left_join(ew[, c("year", "week", ".eff")], catch[, c("year", "week", "total")], by = c("year", "week"))
     yw$total[is.na(yw$total)] <- 0           # an attempted week with no catch is a real 0, not a gap
     yw$idx <- yw$total / yw$.eff             # mosquitoes per 24 trap-hours of effort that week
-  } else {                                   # fallback: per-caught-occasion (no effort table available)
+  } else if (nrow(catch)) {                  # compatibility fallback when no effort table is available
     yw <- catch; yw$idx <- yw$total / pmax(1L, yw$n_occ)
-  }
+  } else return(NULL)
   # Across years per week: the MEDIAN, not the mean. Mosquito catch is wildly
   # skewed and outlier-prone (one fluke year can be 1000x a normal week), so a
   # mean lets a single freak January collection masquerade as the seasonal peak.
@@ -138,8 +143,9 @@ sex_split <- function(obs, sci = NULL) {
 # including supported zero catches. sampleID is never the primary denominator.
 # Chao2 (Chao 1987; Colwell et al. 2012). Genus-only IDs excluded from richness.
 # ---------------------------------------------------------------------------
-# the sampling occasion = a TRAP-NIGHT (occ_id = plotID+collectDate), which the
-# bundler builds to include zero-catch nights. Falls back to sampleID for old bundles.
+# The sampling occasion is one physical daytime or nighttime trap interval. The
+# bundler supplies the exact effort key and retains supported zero catches; old
+# bundles fall back to sampleID only for compatibility.
 collection_occasion <- function(sp) if ("occ_id" %in% names(sp)) as.character(sp$occ_id) else as.character(sp$sampleID)
 # n_occ = total ATTEMPTED collection occasions (incl. zero-catch); the honest T for
 # incidence Chao2. Falls back to caught-occasion count if not supplied.
@@ -168,12 +174,16 @@ chao2_collections <- function(obs, n_occ = NULL) {
 # species are first seen at each position. (The old growing-vector union loop was
 # O(perms*k^2) — ~6s on the biggest real sites; this is ~60-86x faster.)
 mos_accum <- function(obs, effort = NULL, perms = 40) {
-  sp <- target_only(species_level_only(obs)); if (is.null(sp) || !nrow(sp)) return(NULL)
-  caught_ids <- collection_occasion(sp)
   effort_ids <- if (!is.null(effort) && "effort_id" %in% names(effort)) {
     valid <- if ("valid_effort" %in% names(effort)) effort$valid_effort %in% TRUE else rep(TRUE, nrow(effort))
     as.character(effort$effort_id[valid])
   } else character(0)
+  sp <- target_only(species_level_only(obs))
+  if (is.null(sp) || !nrow(sp)) {
+    k <- length(unique(effort_ids))
+    return(if (k < 2) NULL else data.frame(occasions = seq_len(k), richness = rep(0, k)))
+  }
+  caught_ids <- collection_occasion(sp)
   levels <- unique(c(effort_ids, caught_ids))
   occ_id <- match(caught_ids, levels); k <- length(levels); if (k < 2) return(NULL)
   spv <- sp$scientificName
@@ -236,10 +246,11 @@ point_summary <- function(obs, traps) {
     dplyr::summarise(richness = dplyr::n_distinct(.data$scientificName), caught = sum(.data$.cnt, na.rm = TRUE), .groups = "drop")
   tv <- traps %>% dplyr::group_by(.data$plotID) %>%
     dplyr::summarise(lat = stats::median(num(.data$lat), na.rm = TRUE), lng = stats::median(num(.data$lng), na.rm = TRUE),
-                     trap_nights = sum(num(.data$trap_nights), na.rm = TRUE), .groups = "drop")
+                     effort_days = sum(num(.data$effort_days), na.rm = TRUE), .groups = "drop")
   out <- dplyr::left_join(tv, per, by = "plotID")
   out$richness <- ifelse(is.na(out$richness), 0L, out$richness)
-  out$per_tn <- ifelse(out$trap_nights > 0, round(out$caught / out$trap_nights, 1), NA_real_)
+  out$caught <- ifelse(is.na(out$caught), 0, out$caught)
+  out$per_24h <- ifelse(out$effort_days > 0, round(out$caught / out$effort_days, 1), NA_real_)
   out
 }
 
@@ -316,7 +327,7 @@ mos_codebook <- function() {
     column = c("scientificName","vernacularName","genus","sampleID","trapkey","plotID","trapID","year","collectDate",
                "sex","count","is_target","nightOrDay","trapHours","proportionIdentified","expansionFactor",
                "targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode",
-               "index","ubiquity","female_share","trap_nights","mos_per_tn","culex_share","S_obs","chao2","coverage","S_rare"),
+               "index","ubiquity","female_share","effort_days","mos_per_24h","culex_share","S_obs","chao2","coverage","S_rare"),
     units = c("","","","","","","","year","date","F/M/U","# mosquitoes (est.)","logical","night/day","hours","0-1","x",
               "Y/N","category","qualifier","code","per 24 trap-hours","% of occasions","% of sexed","# sampled intervals",
               "per 24 trap-hours","% of catch","# species","# species","0-1","# species"),
@@ -344,9 +355,9 @@ mos_codebook <- function() {
       "Activity index = whole-trap-scaled count / (sum trapHours/24). A within-site index of host-seeking activity, NOT a population.",
       "% of collection occasions (sampled intervals) where the species was ever caught. Less catch-biased than the index, still detection-bound.",
       "% of sexed individuals that were female. A CO2-trap method signature (traps select females), not a population sex ratio.",
-      "Trap-nights = sum(trapHours)/24 at the site; the index denominator.",
+      "Effort in 24-hour units = sum(valid trapHours)/24 at the site; the index denominator.",
       "Site activity index = total whole-trap-scaled catch / (sum valid trapHours/24).",
-      "Culex (West Nile vector group) share of the whole-trap catch.",
+      "Culex share of the whole-trap catch; descriptive taxonomy only, with no pathogen or health-risk inference.",
       "Observed species richness (species caught).",
       "Chao2 incidence-based richness estimate (a bias-corrected MINIMUM; unstable when few species are caught at exactly two occasions). Chao 1987.",
       "Sample-coverage completeness, 0-1 (fraction of the community caught). Chao & Jost 2012.",
@@ -367,9 +378,9 @@ mos_codebook <- function() {
 
   cross <- data.frame(
     column = c("site","name","state","biome_lab","warm_temp_c","mat_c","monsoon_precip_mm","precip_annual_mm",
-               "has_gauge","collections","taxa","t_used","hill_q1","hill_q2","mean_ubiquity","pct_culex",
+               "has_gauge","effort_days","collections","mos_per_24h","taxa","t_used","hill_q1","hill_q2","mean_ubiquity","pct_culex",
                "top_taxon","top_genus"),
-    units  = c("code","","","","°C","°C","mm","mm","logical","# occasions","# species","# occasions",
+    units  = c("code","","","","°C","°C","mm","mm","logical","24-hour units","# occasions","per 24 trap-hours","# species","# occasions",
                "effective # species","effective # species","% of occasions","% of catch","",""),
     description = c(
       "Cross-site CSV: NEON 4-letter site code.",
@@ -381,13 +392,15 @@ mos_codebook <- function() {
       "Cross-site CSV: total precipitation in the site's summer-monsoon window (the water-limited driver). NA where no gauge.",
       "Cross-site CSV: total annual precipitation.",
       "Cross-site CSV: TRUE if the site has a co-located NEON precipitation gauge; FALSE sites fall back to a climatology and cannot anchor a monsoon window.",
+      "Cross-site CSV: total valid trap effort as sum(trapHours/24).",
       "Cross-site CSV: number of collection occasions (sampled intervals with usable effort) the site's numbers are built on.",
+      "Cross-site CSV: whole-trap-scaled target catch divided by valid 24-hour effort units; a within-site activity index.",
       "Cross-site CSV: number of mosquito species (taxa) observed at the site.",
       "Cross-site CSV: the common occasion count that S_rare was rarefied DOWN to (the min across compared sites).",
       "Cross-site CSV: Hill number q=1 (exp Shannon) — effective species count weighting by activity, common species emphasised.",
       "Cross-site CSV: Hill number q=2 (inverse Simpson) — effective species count, dominant species emphasised.",
       "Cross-site CSV: mean ubiquity across the site's species (% of occasions present, averaged).",
-      "Cross-site CSV: Culex (West Nile vector group) share of the site's whole-trap catch (same as culex_share).",
+      "Cross-site CSV: Culex share of the site's whole-trap catch (same as culex_share); no pathogen or health-risk inference.",
       "Cross-site CSV: the most-active species at the site.",
       "Cross-site CSV: the most-active genus at the site."),
     stringsAsFactors = FALSE)

@@ -1,69 +1,58 @@
 # NEON Mosquito Pulse
 
-An explorer for NEON's **Mosquitoes sampled from CO2 traps** (`DP1.10043.001`) — the ninth app in the Desert Data Labs **NEON Explorer Suite**, and its first arthropod-vector rung.
+An unofficial, art-forward explorer for NEON **Mosquitoes sampled from CO₂ traps** (`DP1.10043.001`). The production bundle is pinned to **RELEASE-2026**, DOI **10.48443/rmw1-me46**, across 47 terrestrial sites.
 
-> **The desert monsoon sets off a mosquito pulse.** When the summer rains arrive, standing water appears and, two to six weeks later, adult mosquitoes emerge, paced by how warm those weeks are. This app lets you watch that pulse inside a single desert site, and place it against the whole NEON network in climate space. It is the water-limited mirror of the suite's other climate trigger, the spring warmth that wakes the plants.
+- [Living Poster / GitHub Pages](https://tgilbert14.github.io/NEON-Mosquito-Pulse/)
+- [Interactive Shiny app](https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/)
+- [Suite hub](https://tgilbert14.github.io/NEON-Driver-Cascade/)
 
-**Cover (GitHub Pages):** https://tgilbert14.github.io/NEON-Mosquito-Pulse/
-**App (Posit Connect Cloud):** https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/
+## What is measured
 
----
+The headline metric is eligible whole-trap-scaled mosquitoes per 24 trap-hours. It is a within-site trap-activity index—not population abundance, density, infection, transmission, exposure, or health risk.
 
-## What it shows
+The bundle is opportunity-complete:
 
-A national map of 46 NEON sites, then per site:
+- daytime and nighttime intervals remain separate;
+- valid `targetTaxaPresent = N` intervals are supported zeros;
+- missed, unknown, pending, or held outcomes are not zeros;
+- invalid subsample proportions are held rather than treated as 1×;
+- coarse target IDs remain in total activity but cannot inflate species richness.
 
-| Tab | What it does |
-|---|---|
-| **Overview** | The most-active species (coloured by genus), a plain-English summary, and a genus + sex composition strip. |
-| **The Pulse** | The signature chart: the weekly activity curve with the site's summer-monsoon window shaded behind it, plus species accumulation and a Chao2 richness estimate. |
-| **Swarm Board** | Every species as a dot, **ubiquity × activity index**, Culex flagged. Tap to pin a downloadable card. |
-| **Across the continent** | Every NEON site in climate space (monsoon rain for deserts, degree-days for cooler sites) against its mosquito community. Space-for-time, stated on the chart. |
-| **Taxon Profile** | A downloadable card (PNG + CSV): activity index, ubiquity, the **sex split**, yearly catch, and clickable, downloadable data-quality flags. |
-| **Map** | CO2-trap grids across the site; tap a grid for its species list. |
-| **About** | Methods, the honest-index framing, and the One-Health / West Nile context. |
+See [the scientific contract](docs/SCIENCE-CONTRACT.md) and [pre-release review](docs/EXPERT-REVIEW.md).
 
-## The honesty discipline (shared with the suite)
+## Local app
 
-- **Abundance is a within-site _activity index_** (mosquitoes per trap-night), never a population. A CO2 trap measures host-seeking effort.
-- **The catch is mostly female by design.** CO2 traps lure host-seeking females; a near-all-female catch is the method working, not a population sex ratio.
-- **Big catches are subsample-scaled.** NEON identifies a fixed fraction of a huge night; the count is scaled up to the whole trap by `1 / proportionIdentified`, then divided by trap-nights.
-- **Cross-site is space-for-time** — 46 different places watched at once, correlational, confounded by biome and latitude. Compare sites by direction, never by who has the higher raw catch.
-- **Culex activity is a heads-up, not a risk.** This product is _abundance_; whether a mosquito carries a virus is a separate NEON program. The app never translates a catch into disease risk.
-- **Every chart states how its number was made.**
-
-## Run it locally
+The deployed app runs entirely from committed bundles and local assets. With R 4.5.2 and the runtime packages installed:
 
 ```r
-# from the repo root
-shiny::runApp(".")
+shiny::runApp()
 ```
 
-The app reads only the committed `data/` bundles, no live fetch at runtime.
+No NEON request, CDN, or font download occurs at startup.
 
-### The data is real
+## Build and verification
 
-The committed `data/` bundles are **real NEON catches** — 46 sites of `DP1.10043.001` (mosquitoes from CO2 traps, ~2014–2024), plus the co-located precip/temperature overlays that anchor each site's monsoon window. No synthetic placeholders ship in this build. Rebuild or refresh them with the pipeline below.
-
-### Rebuild / refresh the real NEON data
+The authoritative build runs in pinned GitHub Actions. Core commands are:
 
 ```bash
-# 1. pull the raw product for every site (R-4.1.1; resumable)
-Rscript scripts/fetch_mos_all.R
-# 2. bundle to per-site list(obs, traps, meta) + data/site_index.rds  (the single builder)
-Rscript scripts/bundle_mos_data.R
-# 3. build the climate tables from the env overlays (site_climate + site_month_clim)
-Rscript scripts/build_climate.R
-# 4. precompute the cross-site gradient table (reads the climate tables)
-Rscript scripts/build_cross_site.R
-# 5. regenerate the deploy manifest (or Connect serves a stale package set)
-Rscript scripts/write_manifest.R
+Rscript --vanilla scripts/test_helpers.R
+Rscript --vanilla scripts/fetch_mos_all.R
+Rscript --vanilla scripts/bundle_mos_data.R
+Rscript --vanilla scripts/build_climate.R
+Rscript --vanilla scripts/build_cross_site.R
+Rscript --vanilla scripts/build_search_index.R
+Rscript --vanilla scripts/write_manifest.R
+Rscript --vanilla scripts/verify_bundle.R
+node scripts/check_cover.mjs
 ```
 
-Re-running the pipeline refreshes the committed bundles in place; the monthly GitHub Action (`refresh-data.yml`) reruns the precompute steps and pushes, and Connect Cloud re-publishes.
+The refresh workflow builds all 47 sites in empty staging, validates the exact candidate, and opens a review PR. It cannot push unchecked data to `master`.
 
-## Data product
+## Data and art provenance
 
-NEON [Mosquitoes sampled from CO2 traps (`DP1.10043.001`)](https://data.neonscience.org/data-products/DP1.10043.001). Tables joined: `mos_trapping` (effort / trap-nights), `mos_sorting` (`proportionIdentified`, the subsample fraction), `mos_expertTaxonomistIDProcessed` (the identified counts, Culicidae-only).
+- Source receipt: `data/source-receipt.csv`
+- Bundle contract: `R/mos_bundle_contract.R`
+- Image prompt and hashes: `docs/ART-PROVENANCE.md`
+- Operational handoff: `docs/BUILD-TEST-HANDOFF.md`
 
-Data: National Ecological Observatory Network (operated by Battelle, funded by NSF). **Not affiliated with NEON, Battelle, or the NSF.** An educational data-exploration tool by [Desert Data Labs](https://desertdatalabs.com), Tucson, AZ.
+NEON data are publicly available from the [official product page](https://data.neonscience.org/data-products/DP1.10043.001/RELEASE-2026). This project is not an official NEON product.

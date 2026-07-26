@@ -7,12 +7,12 @@
 #
 # The index is a list(taxa, sites):
 #   taxa  — one row per (scientificName x site): genus, is_culex, the per-site
-#           MEASURE (activity index = whole-trap-scaled count / sampled intervals, the
+#           MEASURE (activity index = whole-trap-scaled count / 24 trap-hours, the
 #           app's honest within-site unit, from vector_board), ubiquity (% of
 #           attempted occasions present), total catch, and year_min/year_max.
 #           This drives FIND-A-TAXON.
 #   sites — the site-level metrics (reuse site_index) + culex_share, for the
-#           THRESHOLD query (Culex share > X%, activity index > X / sampled interval).
+#           THRESHOLD query (Culex share > X%, activity index > X / 24 trap-hours).
 #
 # Run: "/c/Program Files/R/R-4.5.2/bin/Rscript.exe" scripts/build_search_index.R
 # ===========================================================================
@@ -35,7 +35,7 @@ site_rows <- list()
 for (f in files) {
   site <- sub("\\.rds$", "", basename(f))
   b <- tryCatch(readRDS(f), error = function(e) NULL)
-  if (is.null(b) || is.null(b$obs) || !nrow(b$obs)) next
+  if (is.null(b) || is.null(b$obs)) next
   tn   <- b$meta$effort_days %||% b$meta$trap_nights %||% (if (!is.null(b$traps$effort_days)) sum(b$traps$effort_days, na.rm = TRUE) else NA_real_)
   nocc <- b$meta$n_occ_attempted %||% sum(b$effort$valid_effort %in% TRUE)
 

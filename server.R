@@ -33,14 +33,14 @@ server <- function(input, output, session) {
         onclick=sprintf("smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;", gsub("'","",r$name), r$site),
         div(class="sc-emoji","\U0001F99F"),
         div(class="sc-body", div(class="sc-name", tags$b(r$site), sprintf(" · %s", r$name)),
-          div(class="sc-meta", sprintf("%s · %s species · %s / 24 trap-hours", r$state, r$taxa %||% "—", r$mos_per_tn %||% "—")))) }))
+          div(class="sc-meta", sprintf("%s · %s species · %s / 24 trap-hours", r$state, r$taxa %||% "—", r$mos_per_24h %||% "—")))) }))
   })
   shinyjs::hide("mainTabsWrap")
 
   ingest <- function(b, label, is_demo = FALSE) {
     if (is.null(b) || is.null(b$effort) || !any(b$effort$valid_effort %in% TRUE)) {
       session$sendCustomMessage("loadDone", list())   # dismiss the overlay immediately; never wait on the 90s timer
-      showNotification(HTML("No mosquito data is bundled yet. Run <code>Rscript scripts/build_synth_bundle.R</code> (or the real fetch) to populate <code>data/</code>."),
+      showNotification(HTML("No validated mosquito release is bundled. Run the reviewed RELEASE-2026 refresh workflow before deployment."),
                        type = "error", duration = 12)
       return(invisible())
     }
@@ -137,7 +137,7 @@ server <- function(input, output, session) {
   searchThreshRows <- reactive({
     req(SEARCH_INDEX, SEARCH_INDEX$sites)
     s <- SEARCH_INDEX$sites; v <- suppressWarnings(as.numeric(input$threshVal %||% 0)); if (is.na(v)) v <- 0
-    if (identical(input$threshMetric, "index")) s[which((s$mos_per_tn %||% NA) > v), , drop = FALSE]
+    if (identical(input$threshMetric, "index")) s[which((s$mos_per_24h %||% NA) > v), , drop = FALSE]
     else s[which((s$culex_share %||% NA) > v), , drop = FALSE]
   })
   output$searchThreshCaption <- renderUI({
@@ -152,13 +152,13 @@ server <- function(input, output, session) {
     s <- searchThreshRows()
     validate(need(nrow(s) > 0, "No site passes that threshold. Lower the cutoff."))
     nm <- neon_sites$name[match(s$site, neon_sites$site)]
-    s <- s[order(if (identical(input$threshMetric, "index")) -s$mos_per_tn else -s$culex_share), , drop = FALSE]
+    s <- s[order(if (identical(input$threshMetric, "index")) -s$mos_per_24h else -s$culex_share), , drop = FALSE]
     nm <- neon_sites$name[match(s$site, neon_sites$site)]
     out <- data.frame(
       Site = s$site, Name = nm,
       `Culex share (%)` = s$culex_share,
-      `Activity index (per 24 trap-hours)` = s$mos_per_tn,
-      Species = s$taxa, `Trap-nights` = s$trap_nights,
+      `Activity index (per 24 trap-hours)` = s$mos_per_24h,
+      Species = s$taxa, `Effort (24-hour units)` = s$effort_days,
       ` ` = vapply(s$site, go_cell, character(1)),
       check.names = FALSE, stringsAsFactors = FALSE)
     DT::datatable(out, escape = FALSE, rownames = FALSE, selection = "none", options = dt_opts)
@@ -182,7 +182,7 @@ server <- function(input, output, session) {
           info=info_pop("Activity index", p("Whole-trap-scaled mosquitoes per ", tags$b("24 trap-hours"), ", a within-site ", tags$b("activity index, not a population"), ". Weather, lure response, and trap encounter all affect it."))),
         hero(sv$pct_female, "% female", suf="%", icon="gender-female", tone="pine",
           info=info_pop("Female share", p("Share of sexed mosquitoes that were female. CO2 traps ", tags$b("select for host-seeking females"), " by design, so a near-all-female catch is the trap working, not a real sex ratio. Males show up mostly as bycatch."))),
-        hero(sv$trap_nights, "24h effort units", icon="clock-history", tone="gold",
+        hero(sv$effort_days, "24h effort units", icon="clock-history", tone="gold",
           info=info_pop("Sampling effort", p("Total valid effort as ", tags$b("trapHours ÷ 24"), ". Day and night intervals remain separate opportunities even when they share a date.")))))
   })
 
@@ -500,7 +500,7 @@ server <- function(input, output, session) {
 
   # ---- Map (trap grids) ----
   output$map <- leaflet::renderLeaflet({
-    obs <- rv$obs; traps <- rv$traps; req(obs, traps)
+    obs <- rv$obs; traps <- rv$traps; req(!is.null(obs), !is.null(traps))
     g <- point_summary(obs, traps); g <- g[is.finite(g$lat) & is.finite(g$lng), ]
     metric <- input$mapMetric %||% "richness"; val <- g[[metric]]; val[is.na(val)] <- 0
     dom <- if (diff(range(val,na.rm=TRUE))>0) range(val,na.rm=TRUE) else c(val[1]-1,val[1]+1)
@@ -510,7 +510,7 @@ server <- function(input, output, session) {
     leaflet::leaflet(g) %>% leaflet::addProviderTiles(input$view %||% "Esri.WorldTopoMap") %>%
       leaflet::addCircleMarkers(lng=~lng, lat=~lat, radius=~radius, fillColor=pal(val), color="#2a2342", weight=1.5, fillOpacity=0.9,
         layerId=~plotID,
-        label=~lapply(sprintf("<div style='font-family:system-ui,sans-serif'><b>%s</b> · %d species · %s / 24 trap-hours<br><span style='color:#7c52e0;font-weight:700'>\U0001F446 click for the species list</span></div>", short_point(plotID), richness, ifelse(is.na(per_tn),"—",per_tn)), htmltools::HTML)) %>%
+        label=~lapply(sprintf("<div style='font-family:system-ui,sans-serif'><b>%s</b> · %d species · %s / 24 trap-hours<br><span style='color:#7c52e0;font-weight:700'>\U0001F446 click for the species list</span></div>", short_point(plotID), richness, ifelse(is.na(per_24h),"—",per_24h)), htmltools::HTML)) %>%
       leaflet::addLegend("bottomright", pal=pal, values=val, title=if (metric=="richness") "species" else "per 24 trap-hours", opacity=0.9)
   })
   observeEvent(input$map_marker_click, { id <- input$map_marker_click$id; if (!is.null(id)) rv$grid <- id })
@@ -557,7 +557,7 @@ server <- function(input, output, session) {
     d$taxa <- suppressWarnings(as.numeric(d$taxa)); d$taxa[is.na(d$taxa)] <- 0
     rr <- range(d$taxa, na.rm = TRUE); d$rad <- 6 + 11 * (d$taxa - rr[1]) / max(1, diff(rr))
     pop <- sprintf("<div style='font-family:system-ui,sans-serif;min-width:170px'><b>%s · %s</b><br><span style='color:#6f6790'>%s · %s</span><br><b>%s</b> species · <b>%s</b> / 24 trap-hours<br><a href='#' style='color:#7c52e0;font-weight:700' onclick=\"smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;\">\U0001F99F Explore this site &rarr;</a></div>",
-                   d$site, d$name, d$blab, d$state, d$taxa, d$mos_per_tn %||% "—", gsub("'", "", d$name), d$site)
+                   d$site, d$name, d$blab, d$state, d$taxa, d$mos_per_24h %||% "—", gsub("'", "", d$name), d$site)
     leaflet::leaflet(d) %>% leaflet::addProviderTiles("CartoDB.Positron") %>% leaflet::setView(-96, 41, 3) %>%
       leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~rad, fillColor = ~bcol, color = "#fff", weight = 1, fillOpacity = 0.85,
         label = ~lapply(sprintf("<b>%s</b> · %s<br>%s · %s species", site, name, blab, taxa), htmltools::HTML), popup = pop) %>%
@@ -567,6 +567,7 @@ server <- function(input, output, session) {
   # ---- Across the continent: cross-site climate gradient (flagship) ---------
   output$climateGradient <- renderPlotly({
     g <- GRADIENT; if (is.null(g) || !nrow(g)) return(note_plot("Climate gradient unavailable. Run scripts/build_cross_site.R", "\U0001F30D"))
+    n_supported <- nrow(g)
     unit <- input$tempUnit %||% "F"; xvar <- input$gradX %||% "temp"
     if (identical(xvar, "precip")) {
       g <- g[!is.na(g$monsoon_precip_mm) & (g$has_gauge %in% TRUE | is.na(g$has_gauge)), ]
@@ -576,23 +577,23 @@ server <- function(input, output, session) {
     metric <- input$gradMetric %||% "rarefied"
     is_log <- identical(metric, "index")   # the activity index spans ~3,000x across sites — log it so the median band stays legible
     yc <- switch(metric,
-      index    = list(col = "mos_per_tn", lab = "Activity index (mosquitoes / 24 trap-hours)"),
+      index    = list(col = "mos_per_24h", lab = "Activity index (mosquitoes / 24 trap-hours)"),
       rarefied = list(col = "S_rare",     lab = sprintf("Species richness (rarefied to %s sampled intervals)", ifelse(is.na(tcom), "equal", tcom))),
       observed = list(col = "taxa",       lab = "Species richness (observed, effort differs)"),
-      culex    = list(col = "pct_culex",  lab = "Culex share (% of catch, West Nile group)"),
+      culex    = list(col = "pct_culex",  lab = "Culex share (% of catch; descriptive only)"),
       hill1    = list(col = "hill_q1",    lab = "Common-species diversity (Hill q1)"),
-      list(col = "mos_per_tn", lab = "Activity index (mosquitoes / 24 trap-hours)"))
+      list(col = "mos_per_24h", lab = "Activity index (mosquitoes / 24 trap-hours)"))
     if (!yc$col %in% names(g)) yc <- list(col = "taxa", lab = "Species richness (observed)")
     if (is_log) yc$lab <- paste0(yc$lab, " · log scale")
     g$xx <- suppressWarnings(as.numeric(g[[xcol]])); g$yy <- suppressWarnings(as.numeric(g[[yc$col]]))
     if (identical(xvar, "temp")) g$xx <- temp_val(g$xx, unit)
-    g$eff <- suppressWarnings(as.numeric(g$trap_nights %||% g$collections)); g$eff[is.na(g$eff)] <- 1
+    g$eff <- suppressWarnings(as.numeric(g$effort_days %||% g$collections)); g$eff[is.na(g$eff)] <- 1
     g <- g[is.finite(g$xx) & is.finite(g$yy) & (!is_log | g$yy > 0), ]; if (!nrow(g)) return(note_plot("No sites with this combination", "\U0001F30D"))
     g$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b>", g$site, " · ", g$name, "</b><br/>",
       "<em>", g$biome_lab, " · ", g$state, "</em><br/>",
       "<span class='smt-pin-stats'>", temp_disp(g$warm_temp_c, unit), " warm-season · ",
       ifelse(is.na(g$monsoon_precip_mm), "no precip gauge", paste0(g$monsoon_precip_mm, " mm monsoon")), "<br/>",
-      g$taxa, " species · ", round(g$mos_per_tn, 2), " / 24 trap-hours<br/>",
+      g$taxa, " species · ", round(g$mos_per_24h, 2), " / 24 trap-hours<br/>",
       "top: <em>", g$top_taxon, "</em></span>",
       "<br/><span class='smt-open' role='button' tabindex='0' data-action='site' data-tag='", g$site, "'>\U0001F99F Open this site &rarr;</span>",
       "<br/><em class='smt-pin-hint'>Tap the dot to pin this card</em>")
@@ -614,11 +615,11 @@ server <- function(input, output, session) {
       z <- atanh(rho); se <- 1.03 / sqrt(n_sites - 3); lo <- tanh(z - 1.96 * se); hi <- tanh(z + 1.96 * se)
       ci_str <- sprintf(", 95%% CI [%.2f, %.2f], n = %d", lo, hi, n_sites)
     } else if (is.finite(rho)) ci_str <- sprintf(", n = %d", n_sites)
-    nshown <- if (nrow(g) < 46) sprintf("<b>%d of 46 NEON sites</b>", nrow(g)) else "<b>each of 46 NEON sites</b>"
+    nshown <- if (nrow(g) < n_supported) sprintf("<b>%d of %d climate-supported sites</b>", nrow(g), n_supported) else sprintf("<b>each of %d climate-supported sites</b>", n_supported)
     ann <- list(
-      list(text = sprintf("Every dot is %s · %s × %s · dot size = sampled intervals", nshown, if (xvar == "precip") "monsoon precip" else "warm-season temperature", tolower(yc$lab)),
+      list(text = sprintf("Every dot is %s · %s × %s · dot size = 24-hour effort", nshown, if (xvar == "precip") "warm-season precipitation" else "warm-season temperature", tolower(yc$lab)),
            x = 0, y = 1.15, xref = "paper", yref = "paper", showarrow = FALSE, xanchor = "left", font = list(color = muted, size = 11)),
-      list(text = sprintf("Spearman ρ = %.2f%s · space-for-time (47 places, not one site warming), correlational, confounded by biome &amp; latitude", ifelse(is.na(rho), 0, rho), ci_str),
+      list(text = sprintf("Spearman ρ = %.2f%s · space-for-time (different places, not one site warming), correlational, confounded by biome &amp; latitude", ifelse(is.na(rho), 0, rho), ci_str),
            x = 0, y = 1.075, xref = "paper", yref = "paper", showarrow = FALSE, xanchor = "left", font = list(color = muted, size = 10.5)))
     p %>% plotly_theme() %>% plotly::layout(xaxis = list(title = list(text = xlab, standoff = 10)),
       yaxis = list(title = yc$lab, type = if (is_log) "log" else "linear", rangemode = if (is_log) "normal" else "tozero"),
@@ -633,7 +634,7 @@ server <- function(input, output, session) {
       g <- GRADIENT
       if (is.null(g) || !nrow(g)) { utils::write.csv(data.frame(note = "Cross-site table unavailable; run scripts/build_cross_site.R."), file, row.names = FALSE); return() }
       keep <- intersect(c("site","name","state","biome_lab","warm_temp_c","mat_c","monsoon_precip_mm","precip_annual_mm","has_gauge",
-                          "trap_nights","collections","taxa","mos_per_tn","S_obs","S_rare","t_used","coverage","hill_q1","hill_q2","mean_ubiquity","pct_culex","top_taxon","top_genus"), names(g))
+                          "effort_days","collections","taxa","mos_per_24h","S_obs","S_rare","t_used","coverage","hill_q1","hill_q2","mean_ubiquity","pct_culex","top_taxon","top_genus"), names(g))
       out <- g[, keep, drop = FALSE]
       if (isTRUE(ANY_SYNTHETIC)) out$DATA_NOTE <- "SYNTHETIC PLACEHOLDER — not measurements"
       utils::write.csv(out, file, row.names = FALSE, na = "") },
@@ -661,10 +662,10 @@ server <- function(input, output, session) {
         m("site_label", rv$label %||% NA, ""),
         m("years_sampled", yr_lab, ""),
         m("species_caught", if (!is.null(sv)) sv$n_taxa else NA, "distinct species in CO2-trap catch"),
-        m("activity_index_per_trap_night", if (!is.null(sv)) sv$index else NA, "within-site activity index, not a population"),
+        m("activity_index_per_24_trap_hours", if (!is.null(sv)) sv$index else NA, "within-site activity index, not a population"),
         m("pct_female", if (!is.null(sv)) sv$pct_female else NA, "share of sexed catch that was female (CO2 traps select females)"),
-        m("culex_share_pct", if (!is.null(sv)) sv$culex_share else NA, "Culex (West Nile group) share of catch — activity, not infection"),
-        m("trap_nights", if (!is.null(sv)) sv$trap_nights else NA, "total effort (trapHours / 24)"),
+        m("culex_share_pct", if (!is.null(sv)) sv$culex_share else NA, "Culex share of catch — activity only, not infection or risk"),
+        m("effort_days", if (!is.null(sv)) sv$effort_days else NA, "total valid effort (trapHours / 24)"),
         m("collections", if (!is.null(sv)) sv$n_collections else NA, "valid day/night sampling intervals"),
         m("most_active_species", if (!is.null(sv)) sv$top else NA, ""),
         m("peak_activity_week", peak_wk, "ISO week of the year of peak activity"),
@@ -682,11 +683,11 @@ server <- function(input, output, session) {
         p("An (unofficial) explorer for NEON's ", tags$b("Mosquitoes sampled from CO2 traps"), " (", tags$code("DP1.10043.001"), "). A CO2 trap releases carbon dioxide, the gas animals breathe out, and host-seeking female mosquitoes fly toward it. NEON sorts, weighs, and identifies the catch.")),
       div(class="about-card", h4(bs_icon("activity"), " Activity index, not population"),
         p("A CO₂ trap measures host-seeking ", tags$b("activity"), ", not a headcount. Eligible subsampled catches are scaled by ", tags$b("1 / proportionIdentified"), " and divided by valid effort in ", tags$b("24-hour units"), ". Invalid proportions are held. The result is a ", tags$b("within-site index"), ", never a population."),
-        p("Almost every mosquito in the catch is ", tags$b("female"), ", because only females bite and seek the CO2 plume. Read the sex split as a quality signal: a near-all-female catch is a normal, healthy trap.")),
+        p("Almost every mosquito in the catch is ", tags$b("female"), ", because host-seeking females respond to the CO₂ plume. Read the sex split as a method signature: a near-all-female catch is expected for this trap design.")),
       div(class="about-card", h4(bs_icon("calculator"), " How many species?"),
         p(tags$b("Chao2"), " (incidence-based) estimates how many species use the site beyond those caught. The sampling unit is a ", tags$b("collection occasion"), " (one sampled interval), so revisits aren't double-counted. CO2 traps miss day-active and rare mosquitoes.")),
       div(class="about-card", h4(bs_icon("globe-americas"), " Across the continent"),
-        p("NEON runs this protocol at ", tags$b("46 terrestrial sites"), ". The ", tags$b("Across the continent"), " tab places each site by its warm-season climate against its mosquito community. Deserts read against ", tags$b("monsoon rainfall"), " (the water that limits them); cooler sites against ", tags$b("degree-days"), " (the warmth that paces them)."),
+        p("NEON's RELEASE-2026 roster contains ", tags$b("47 terrestrial sites"), ". The ", tags$b("Across the continent"), " tab places climate-supported sites by warm-season conditions against their mosquito communities. PUUM remains available throughout the mosquito explorer but is held from this climate overlay until an equivalent pinned environmental bundle is available."),
         p("Richness is ", tags$b("rarefied to a common number of sampled intervals"), " (Colwell et al. 2012). It is a ", tags$b("space-for-time"), " comparison, 47 places at once, not one place warming, so it is correlational, confounded by biome and latitude. Activity is a within-site index, so sites are compared by direction, never by who has the higher raw catch.")),
       div(class="about-card", h4(bs_icon("shield-exclamation"), " The vector angle"),
         p("Some ", tags$b("Culex"), " species are important West Nile virus vectors, but this explorer uses the mosquito catch product only. It does ", tags$b("not"), " test for a virus or estimate transmission, exposure, or health risk.")),
