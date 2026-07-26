@@ -226,4 +226,10 @@ jobs:
           git commit -m "data: propose validated mosquito RELEASE-2026 [bot]" -m "Exact 47-site opportunity-complete candidate from ${GITHUB_SHA}."
           if [ -n "$remote_head" ]; then git push --force-with-lease="refs/heads/$branch:$remote_head" origin "$branch:refs/heads/$branch"; else git push origin "$branch:refs/heads/$branch"; fi
           pr_url=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url')
-          if [ -z "$pr_url" ]; then gh pr create --base master --head "$branch" --title "data: validated mosquito RELEASE-2026" --body "Immutable 47-site candidate from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Merge is the explicit deploy decision."; else gh pr comment "$pr_url" --body "Updated from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."; fi
+          if [ -z "$pr_url" ]; then
+            if ! gh pr create --base master --head "$branch" --title "data: validated mosquito RELEASE-2026" --body "Immutable 47-site candidate from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Merge is the explicit deploy decision."; then
+              echo "::notice title=Validated review branch ready::GitHub Actions may not create pull requests in this repository. Open a PR from $branch after reviewing run ${GITHUB_RUN_ID}."
+            fi
+          else
+            gh pr comment "$pr_url" --body "Updated from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+          fi
