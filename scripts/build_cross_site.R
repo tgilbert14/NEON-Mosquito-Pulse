@@ -2,7 +2,7 @@
 # build_cross_site.R — precompute data/cross_site.rds: the EFFORT-STANDARDIZED
 # community metrics the "Across the continent" gradient tab reads. Raw richness
 # is an effort artifact, so we rarefy every site's richness to a COMMON number
-# of collection occasions (trap-nights) and also report coverage, Hill q1/q2,
+# of collection occasions (sampled intervals) and also report coverage, Hill q1/q2,
 # mean ubiquity, and the Culex (West Nile group) share of the catch.
 #
 # One row per site: site, T_occ, S_obs, S_rare, t_used, coverage, hill_q1,
@@ -20,7 +20,7 @@ for (f in files) {
   b <- tryCatch(readRDS(f), error = function(e) NULL); if (is.null(b) || is.null(b$obs)) next
   si <- site_incidence(b$obs, b$meta$n_occ_attempted); if (is.null(si) || si$T < 2) next
   inc[[s]] <- si
-  brd <- vector_board(b$obs, b$meta$n_occ_attempted %||% si$T, b$meta$trap_nights)
+  brd <- vector_board(b$obs, b$meta$n_occ_attempted %||% si$T, b$meta$effort_days %||% b$meta$trap_nights)
   gs  <- genus_share(b$obs); culex <- if (!is.null(gs)) gs$share[gs$genus == "Culex"] else NA_real_
   base[[s]] <- data.frame(site = s, T_occ = si$T, S_obs = length(si$Y),
                           mean_ubiquity = round(mean(brd$ubiquity), 1),

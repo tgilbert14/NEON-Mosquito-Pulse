@@ -5,7 +5,7 @@
 # the prior siblings; the analysis layer is CO2-trap / activity-index native.
 #
 # Honesty grain: abundance is a WITHIN-SITE activity index (mosquitoes per
-# trap-night), never a population. CO2 traps lure host-seeking females, so the
+# 24 trap-hours), never a population. CO2 traps lure host-seeking females, so the
 # catch is a measure of host-seeking activity, not a headcount.
 # ===========================================================================
 suppressPackageStartupMessages({
@@ -30,7 +30,7 @@ read_bundle <- function(f) {
   out <- tryCatch(readRDS(f), error = function(e) { warning(sprintf("read_bundle('%s'): %s", f, conditionMessage(e))); NULL })
   if (is.null(out)) return(NULL)
   if (is.data.frame(out)) return(out)
-  if (is.null(out$obs) || !nrow(out$obs)) NULL else out
+  if (is.null(out$effort) || !any(out$effort$valid_effort %in% TRUE)) NULL else out
 }
 load_site_bundle <- function(site) read_bundle(file.path(SITE_DIR, paste0(site, ".rds")))
 load_demo <- function() { b <- load_site_bundle(DEMO_META$site); if (!is.null(b)) b else read_bundle(DEMO_PATH) }
@@ -40,7 +40,7 @@ BUNDLED <- if (!is.null(SITE_INDEX)) SITE_INDEX$site else character(0)
 site_table <- if (length(BUNDLED)) {
   m <- neon_sites[match(BUNDLED, neon_sites$site), ]
   cbind(m, SITE_INDEX[match(m$site, SITE_INDEX$site),
-    intersect(c("taxa", "individuals", "collections", "trap_nights", "mos_per_tn", "top_taxon", "top_genus", "synthetic"), names(SITE_INDEX))])
+    intersect(c("taxa", "individuals", "collections", "effort_days", "trap_nights", "zero_catches", "mos_per_24h", "mos_per_tn", "top_taxon", "top_genus", "synthetic"), names(SITE_INDEX))])
 } else neon_sites[0, ]
 
 # Data-state flags drive the honest banners. NO_DATA: nothing bundled yet (the
@@ -88,17 +88,10 @@ SEX_COL <- c(F = "#7c52e0", M = "#3fb6c9", U = "#9aa0b4")
 sex_col <- function(s) { s <- toupper(substr(as.character(s), 1, 1)); out <- unname(SEX_COL[s]); ifelse(is.na(out), unname(SEX_COL["U"]), out) }
 sex_lab <- c(F = "Female", M = "Male", U = "Undetermined")
 
-# Rubik is named as a PLAIN CSS font-family here (a bslib font_collection of bare
-# strings), NOT font_google("Rubik"). font_google() defaults to local = TRUE, which
-# makes bslib DOWNLOAD the font from Google and compile it into the theme AT APP
-# STARTUP. On Connect Cloud that live fetch runs on every cold start against an empty
-# cache; when Google Fonts is slow/unreachable the Sass compile blocks/fails during
-# boot -> black screen / "start-up error" (republish only re-primes the cache until the
-# next recycle). Naming the family as a string does ZERO network at boot; the real
-# Rubik glyphs are still delivered client-side by the <link> in ui.R (display=swap),
-# with a system-sans fallback. See docs/neonize-playbook.md §4.
+# The UI uses only locally available system fonts. No font or CDN request is
+# required at app startup or in the browser.
 rubik_stack <- bslib::font_collection(
-  "Rubik", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif")
+  "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif")
 app_theme <- bs_theme(version = 5, bg = "#fbfaff", fg = DDL$ink,
   primary = DDL$violet, secondary = DDL$amber, success = DDL$lime, info = DDL$sky,
   warning = DDL$amber, danger = "#d94f7a",
