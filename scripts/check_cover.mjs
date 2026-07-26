@@ -8,8 +8,10 @@ const requiredCover = [
   "What rises after rain?",
   "Follow mosquito activity through rainfall, warmth, and each sampled season.",
   "Choose a field site",
+  "Desert Data Labs",
   "NEON-Driver-Cascade",
-  "Illustration · not a measurement",
+  "Editorial illustration—not a field photograph or data record.",
+  "What am I looking at?",
   "assets/mosquito-living-poster-v1.webp",
 ];
 const requiredApp = [
@@ -24,10 +26,13 @@ const requiredApp = [
 ];
 for (const value of requiredCover) if (!cover.includes(value)) throw new Error(`cover missing ${value}`);
 for (const value of requiredApp) if (!ui.includes(value)) throw new Error(`app poster missing ${value}`);
-const coverFace = cover.match(/<header class="poster">([\s\S]*?)<\/header>/)?.[1] ?? "";
+const coverFace = cover.match(/<main id="main" class="poster"[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
+if (!coverFace) throw new Error("cover face must be the main poster landmark");
 if ((coverFace.match(/class="button"/g) ?? []).length !== 1) throw new Error("cover face must have exactly one contextual CTA");
 if ((coverFace.match(/NEON-Driver-Cascade/g) ?? []).length !== 1) throw new Error("cover face must have exactly one Driver route");
 if (/field-strip|field-stat/.test(coverFace)) throw new Error("cover face must not contain a metric strip");
+if (/class="(?:method|truths|truth|boundary)"/.test(cover)) throw new Error("cover must move method detail into the app");
+if ((cover.match(/<details class="honesty">/g) ?? []).length !== 1) throw new Error("cover needs one compact honesty disclosure");
 if (/<script[^>]+src=["']https?:|<img[^>]+src=["']https?:|<link[^>]+rel=["']stylesheet["'][^>]+href=["']https?:/i.test(cover)) throw new Error("cover has remote runtime asset");
 if (/tags\$(?:script|link|img)\([^\n]*https?:/i.test(ui)) throw new Error("app has remote runtime asset");
 if (!/alt="Screenprint illustration[^"<>]+"/.test(cover)) throw new Error("cover art needs descriptive alt text");

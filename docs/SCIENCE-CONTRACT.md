@@ -80,7 +80,11 @@ Eligibility requires one unambiguous sorting record per `subsampleID` and `0 < p
 
 ## Trap illustration boundary
 
-NEON documentation calls the equipment a CDC light-trap assembly, but the sampling protocol removes the bulb and deploys it without light; CO₂ is the lure. Both Living Posters therefore show a moonlit scene and an unlit fan trap. The art is explicitly labeled “Illustration · not a measurement.”
+NEON documentation calls the equipment a CDC light-trap assembly, but the
+sampling protocol removes the bulb and deploys it without light; CO₂ is the lure.
+Both Living Posters therefore show a moonlit scene and an unlit fan trap. Both
+surfaces explicitly identify the art as illustration rather than field
+documentation or a data record.
 
 ## Primary references
 

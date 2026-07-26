@@ -61,55 +61,54 @@
     .button{min-height:52px;display:inline-flex;align-items:center;justify-content:center;gap:11px;padding:0 24px;border-radius:999px;color:var(--night);background:var(--lime);box-shadow:0 14px 42px rgba(208,220,57,.17);font-size:.91rem;font-weight:850;text-decoration:none}.button:hover{background:#edf375}
     .poster-art{position:relative;align-self:stretch;min-height:600px;margin:0 -4vw 0 -7vw}.poster-art::before{content:"";position:absolute;z-index:2;inset:0;pointer-events:none;background:linear-gradient(90deg,var(--night) 0%,rgba(16,21,47,.77) 13%,transparent 45%)}
     .poster-art img{width:100%;height:100%;min-height:calc(100svh - 82px);display:block;object-fit:cover;object-position:66% center}.art-note{position:absolute;z-index:3;right:4vw;bottom:24px;margin:0;padding:5px 10px;border:1px solid var(--line);border-radius:999px;color:var(--paper);background:rgba(16,21,47,.9);font-size:.69rem;letter-spacing:.035em}
-    main{background:var(--paper)}.method{width:min(1120px,calc(100% - 44px));margin:0 auto;padding:86px 0 94px}.method-kicker{margin:0 0 12px;color:#52612d;font-size:.74rem;font-weight:850;letter-spacing:.17em;text-transform:uppercase}.method h2{max-width:800px;margin:0;font-family:var(--serif);font-size:clamp(2.5rem,5vw,4.8rem);font-weight:600;letter-spacing:-.047em;line-height:.96}.method-lead{max-width:720px;margin:25px 0 0;color:#45516b;font-size:1.05rem}
-    .truths{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:46px}.truth{padding:25px;border:1px solid rgba(23,33,59,.16);border-radius:18px;background:rgba(255,255,255,.32)}.truth .n{display:block;margin-bottom:26px;color:#6d55bc;font-family:var(--serif);font-size:1.1rem}.truth h3{margin:0;font-family:var(--serif);font-size:1.45rem}.truth p{margin:10px 0 0;color:#536078;font-size:.91rem}
-    .boundary{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:42px;overflow:hidden;border:1px solid rgba(23,33,59,.16);border-radius:18px;background:rgba(23,33,59,.16)}.boundary div{padding:25px;background:#e9dfc3}.boundary h3{margin:0 0 9px;font-size:.75rem;letter-spacing:.14em;text-transform:uppercase}.boundary p{margin:0;color:#45516b}.boundary .can h3{color:#536b1b}.boundary .cannot h3{color:#6d55bc}
-    footer{color:var(--paper-2);background:var(--night)}.footer-inner{width:min(1120px,calc(100% - 44px));display:flex;justify-content:space-between;gap:30px;padding:34px 0 50px;margin:0 auto;font-size:.82rem}.footer-inner a{color:var(--cyan)}
-    @media(max-width:900px){.poster-grid{grid-template-columns:1fr}.poster-copy{padding:54px 0 28px}.poster-art{min-height:48svh;margin:0 -24px}.poster-art::before{background:linear-gradient(180deg,var(--night),transparent 38%)}.poster-art img{min-height:48svh}.truths{grid-template-columns:1fr}.boundary{grid-template-columns:1fr}}
-    @media(max-width:560px){.topline,.poster-grid{width:min(100% - 30px,1440px)}.suite-jump{font-size:0}.suite-jump strong,.suite-jump span{font-size:.72rem}.poster-copy{padding-top:44px}h1{font-size:clamp(3.55rem,18vw,5.1rem)}.poster-art{margin:0 -15px}.method{padding:64px 0}.footer-inner{flex-direction:column}}
+    footer{padding:30px 24px 38px;color:#5b6274;background:var(--paper);font-size:.76rem;line-height:1.65}.footer-inner{width:min(1160px,100%);display:flex;justify-content:space-between;gap:42px;margin:0 auto}.footer-copy{max-width:820px}.footer-copy>p{margin:0}.footer-copy a{color:#334a82}.honesty{margin-top:10px}.honesty summary{width:fit-content;min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--ink);font-weight:800}.honesty p{max-width:790px;margin:2px 0 0}.footer-links{display:flex;gap:8px 18px;white-space:nowrap}.footer-links a{min-height:44px;display:inline-flex;align-items:center;color:#334a82;font-weight:750;text-underline-offset:4px}footer a:focus-visible,.honesty summary:focus-visible{outline-color:var(--ink)}
+    @media(max-width:900px){.poster-grid{grid-template-columns:1fr}.poster-copy{padding:54px 0 28px}.poster-art{min-height:48svh;margin:0 -24px}.poster-art::before{background:linear-gradient(180deg,var(--night),transparent 38%)}.poster-art img{min-height:48svh}}
+    @media(max-width:700px){.topline{width:calc(100% - 32px);min-height:66px}.brand{font-size:.66rem;letter-spacing:.1em}.brand-mark{width:25px;height:25px}.suite-jump{max-width:152px;font-size:.66rem;line-height:1.25;text-align:right}.poster-grid{width:100%;min-height:auto;display:flex;flex-direction:column}.poster-art{order:1;width:100%;height:42svh;min-height:300px;margin:0}.poster-art::before{background:none}.poster-art img{height:42svh;min-height:300px;object-position:66% 58%}.art-note{right:16px;bottom:8px;left:16px;width:fit-content;max-width:calc(100% - 32px);min-height:28px;font-size:.6rem;line-height:1.25}.poster-copy{order:2;width:calc(100% - 32px);align-self:center;padding:26px 0 38px}.eyebrow{margin-bottom:13px;font-size:.65rem}h1{font-size:clamp(3.5rem,18.2vw,5.35rem);line-height:.84}.promise{margin-top:22px;font-size:1rem}.poster-actions{margin-top:25px}.button{width:100%}.footer-inner{display:block}.footer-links{margin-top:12px;white-space:normal;flex-wrap:wrap}}
+    @media(max-width:420px) and (max-height:860px){.poster-art,.poster-art img{height:34svh;min-height:34svh}.poster-copy{padding-top:22px}h1{font-size:clamp(3rem,16.3vw,3.7rem)}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
     @media(forced-colors:active){.poster,.button,.suite-jump,.skip{border:2px solid ButtonText}.button,.suite-jump,.skip{forced-color-adjust:auto}}
   </style>
 </head>
 <body data-release-marker="mosquito-pulse-poster-v1">
-  <a class="skip" href="#method">Skip to the science</a>
-  <header class="poster">
-    <div class="topline">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 14c4-2 5-7 8-8 3 1 4 6 8 8M12 6v13M7 18l5-3 5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>NEON Explorer Suite</div>
-      <nav aria-label="Suite navigation"><a class="suite-jump" href="https://tgilbert14.github.io/NEON-Driver-Cascade/">Return to <strong>Driver Cascade</strong><span>↗</span></a></nav>
-    </div>
+  <a class="skip" href="#main">Skip to the poster</a>
+  <main id="main" class="poster" tabindex="-1">
+    <header class="topline">
+      <span class="brand" aria-label="Desert Data Labs"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3v18M8 8l4-4 4 4M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Desert Data Labs</span>
+      <nav class="cover-nav" aria-label="NEON Explorer Suite"><a class="suite-jump" href="https://tgilbert14.github.io/NEON-Driver-Cascade/">Whole suite: <strong>Driver Cascade</strong><span aria-hidden="true">↗</span></a></nav>
+    </header>
     <div class="poster-grid">
       <div class="poster-copy">
-        <p class="eyebrow">Mosquitoes · CO₂ traps · release 2026</p>
-        <h1><span>What rises</span><em>after rain?</em></h1>
+        <p class="eyebrow">NEON Mosquito Pulse · unofficial</p>
+        <h1 aria-label="What rises after rain?"><span>What rises</span><em>after rain?</em></h1>
         <p class="promise">Follow mosquito activity through rainfall, warmth, and each sampled season.</p>
         <div class="poster-actions">
           <a class="button" href="https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/">Choose a field site <span aria-hidden="true">→</span></a>
         </div>
       </div>
       <figure class="poster-art">
-        <img src="assets/mosquito-living-poster-v1.webp" width="1200" height="800" alt="Screenprint illustration of a mosquito beside a moonlit wetland and an unlit CO2 fan trap with cooler, hose, fan, and catch cup.">
-        <figcaption class="art-note">Illustration · not a measurement</figcaption>
+        <picture>
+          <source type="image/webp" srcset="assets/mosquito-living-poster-v1.webp">
+          <img src="assets/mosquito-living-poster-v1.png" width="1200" height="800" fetchpriority="high" decoding="async" alt="Screenprint illustration of a mosquito beside a moonlit wetland and an unlit CO2 fan trap with cooler, hose, fan, and catch cup.">
+        </picture>
+        <figcaption class="art-note">Editorial illustration—not a field photograph or data record.</figcaption>
       </figure>
     </div>
-  </header>
-
-  <main id="method">
-    <section class="method" aria-labelledby="method-title">
-      <p class="method-kicker">The measurement before the pattern</p>
-      <h2 id="method-title">The trap records the opportunity. The catch records the outcome.</h2>
-      <p class="method-lead">NEON services CO₂ fan traps for separate nighttime and daytime intervals. The hardware is often called a “light trap,” but NEON deploys it without the bulb: carbon dioxide is the lure. This explorer keeps every valid sampled interval—including supported zero catches—before calculating activity.</p>
-      <div class="truths">
-        <article class="truth"><span class="n">01</span><h3>Keep the zeros</h3><p>A valid interval with <code>targetTaxaPresent = N</code> is real effort and a real zero. A missed or unusable interval is unavailable, never zero.</p></article>
-        <article class="truth"><span class="n">02</span><h3>Expand with evidence</h3><p>Large catches may be subsampled. Eligible counts are expanded continuously by <code>1 / proportionIdentified</code>; invalid proportions are held, not guessed.</p></article>
-        <article class="truth"><span class="n">03</span><h3>Read activity</h3><p>Mosquitoes per 24 trap-hours is a within-site activity index of trap encounter—not population size, density, infection, or human health risk.</p></article>
-      </div>
-      <div class="boundary">
-        <div class="can"><h3>This explorer can</h3><p>Show when and where the standardized CO₂-trap catch changes, with species-level richness separated from coarser identifications.</p></div>
-        <div class="cannot"><h3>This explorer cannot</h3><p>Estimate mosquito populations, prove weather caused a pulse, or infer pathogen presence, transmission, exposure, or disease risk.</p></div>
-      </div>
-    </section>
   </main>
-  <footer><div class="footer-inner"><span>Unofficial explorer built from NEON DP1.10043.001 · RELEASE-2026 · DOI 10.48443/rmw1-me46</span><span><a href="https://data.neonscience.org/data-products/DP1.10043.001/RELEASE-2026">NEON product</a> · <a href="https://github.com/tgilbert14/NEON-Mosquito-Pulse">Source code</a> · <a href="https://www.neonscience.org/data-collection/mosquitoes">Collection method</a></span></div></footer>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-copy">
+        <p>Explore 47 places using public <a href="https://data.neonscience.org/data-products/DP1.10043.001/RELEASE-2026">NEON Mosquitoes sampled from CO₂ traps data · DP1.10043.001</a> (CC BY 4.0). Built by Desert Data Labs; unofficial and not endorsed by NEON, Battelle, or the NSF.</p>
+        <details class="honesty">
+          <summary>What am I looking at?</summary>
+          <p>The explorer follows standardized daytime and nighttime CO₂-trap intervals and their catches, including supported zero catches; missed or unusable intervals remain unavailable, never zero. It shows whole-trap-scaled encounters per 24 trap-hours—an activity index, not population size, infection, transmission, exposure, or disease risk. Weather patterns are descriptive, not causal.</p>
+        </details>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/tgilbert14/NEON-Mosquito-Pulse">Source</a>
+        <a href="mailto:desertdatalabs@gmail.com?subject=NEON%20Mosquito%20Pulse">Feedback</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>
