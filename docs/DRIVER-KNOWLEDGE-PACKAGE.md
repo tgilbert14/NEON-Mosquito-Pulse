@@ -62,3 +62,16 @@ boundary in one collapsed disclosure without turning the first impression into a
 methods page. Artwork-first mobile order, one Driver route, one CTA, explicit
 illustration labeling, and 44 px primary/disclosure controls remain part of the
 shared frame.
+
+### Published cover authority
+
+- Pages presentation authority: PR #7, exact head
+  `db732ebaa1173f92e5a36511401060b4224cdde7`, merged as
+  `ec0f2ba4df71040d1760c23338da39233b92db96`.
+- Exact PR-head CI `30218822559`, merged-master CI `30218905672`, Pages
+  `30218905198`, and production smoke `30218905626`: PASS.
+- Fresh live 1440/390/320 browser acceptance confirmed the compact poster flow,
+  intrinsic 1200×800 local artwork, no overflow, and empty warning/error logs.
+- The prior `935420e` runtime/science disposition remains authoritative for the
+  Connect product; `ec0f2ba` supersedes only the earlier verbose Pages-cover
+  presentation.

@@ -182,3 +182,44 @@ The first production browser pass found `heroStats` and `siteInsights` in generi
 - Publish this candidate through a ready PR, require exact-head CI, merge, verify
   exact master CI and Pages, append the publication receipt, then reconcile the
   Driver suite register without changing Driver release artifacts.
+
+## 2026-07-26 13:31 MST · Living Poster flow correction publication receipt (America/Phoenix)
+
+### Exact GitHub authority
+
+- Ready PR [#7](https://github.com/tgilbert14/NEON-Mosquito-Pulse/pull/7)
+  published exact candidate `db732ebaa1173f92e5a36511401060b4224cdde7`.
+- Exact PR-head validation run `30218822559`: PASS, including pinned R/package
+  contracts, scientific helpers, exact manifest regeneration, bundle/receipt
+  validation, offline app sourcing, cover contract, and real SRER server render.
+- PR #7 merged to `master` as
+  `ec0f2ba4df71040d1760c23338da39233b92db96`.
+- Exact merged-master validation run `30218905672`: PASS.
+- Exact Pages build/deploy run `30218905198`: PASS on `ec0f2ba`.
+- Exact production semantic smoke run `30218905626`: PASS on `ec0f2ba`.
+
+### Fresh production acceptance
+
+- Cache-busted Pages authority:
+  <https://tgilbert14.github.io/NEON-Mosquito-Pulse/?trim=ec0f2ba>.
+- Fresh live browser QA passed at 1440×900, 390×844, and 320×800 with no
+  horizontal overflow, one H1, one CTA, one Driver route, zero H2/method/card
+  blocks, a 52 px CTA, and a 44 px collapsed honesty control.
+- At 390 and 320 px the full artwork loads first, the CTA remains in the first
+  viewport, and the compact footer starts exactly at 844 and 800 CSS px. At
+  desktop width the poster occupies the full first viewport and the footer begins
+  at 900 CSS px.
+- The production WebP completed at its intrinsic 1200×800 dimensions, with the
+  local PNG fallback retained. Browser warning/error logs were empty.
+- Visual inspection confirmed the complete wetland/trap artwork, readable
+  hook/promise/CTA, explicit illustration label, and direct transition from the
+  poster to the compact footer/disclosure.
+
+### Closed decision
+
+- **NONE / NO DRIVER BYTE CHANGE** remains final. This publication changes only
+  the Pages presentation and cover regression contract. The Connect runtime,
+  RELEASE-2026 source and bundles, opportunity/zero states, estimators, and exact
+  manifest remain unchanged.
+- The next suite action is Driver register reconciliation, followed by the Birds
+  product pass.
