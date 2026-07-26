@@ -48,6 +48,7 @@ neon_sites <- tibble::tribble(
   "SJER", "D17",  "San Joaquin Experimental Range",               "CA",   37.1088, -119.7323,  "Oak savanna and annual grassland of California's Sierra Nevada foothills.",
   "SOAP", "D17",  "Soaproot Saddle",                               "CA",   37.0334, -119.2622,  "Mixed-conifer and oak forest of the central Sierra Nevada, California.",
   "TEAK", "D17",  "Lower Teakettle",                               "CA",   37.0058, -119.0060,  "High Sierra Nevada mixed-conifer forest in California.",
+  "PUUM", "D20",  "Pu'u Maka'ala Natural Area Reserve",           "HI",   19.5531, -155.3173,  "Montane wet forest on Hawai'i Island, with native 'ohi'a canopy, tree ferns, and frequent cloud and rain.",
   "BARR", "D18",  "Utqiagvik (Barrow)",                            "AK",   71.2824, -156.6194,  "Arctic coastal tundra at the northern tip of Alaska.",
   "TOOL", "D18",  "Toolik Lake",                                   "AK",   68.6611, -149.3705,  "Arctic foothills tundra on Alaska's North Slope.",
   "BONA", "D19",  "Caribou-Poker Creeks Research Watershed",       "AK",   65.1540, -147.5026,  "Boreal black-spruce forest and permafrost of interior Alaska.",
@@ -59,7 +60,7 @@ neon_sites <- tibble::tribble(
 state_names <- c(
   AK = "Alaska", AL = "Alabama", AZ = "Arizona", CA = "California", CO = "Colorado",
   FL = "Florida", GA = "Georgia", KS = "Kansas", MA = "Massachusetts", MD = "Maryland",
-  MI = "Michigan", ND = "North Dakota", NH = "New Hampshire", NM = "New Mexico",
+  HI = "Hawaii", MI = "Michigan", ND = "North Dakota", NH = "New Hampshire", NM = "New Mexico",
   OK = "Oklahoma", PR = "Puerto Rico", TN = "Tennessee", TX = "Texas", UT = "Utah",
   VA = "Virginia", WA = "Washington", WI = "Wisconsin", WY = "Wyoming"
 )

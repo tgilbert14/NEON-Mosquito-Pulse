@@ -160,14 +160,14 @@ document.addEventListener("keydown", function (e) {
 // ---- Shiny custom message handlers ---------------------------------------
 document.addEventListener("DOMContentLoaded", function () {
   if (window.Shiny) {
-    Shiny.addCustomMessageHandler("countUp", function () {
+    Shiny.addCustomMessageHandler("countUp", function (_msg) {
       // small delay so the freshly-rendered DOM is in place
       setTimeout(runCounters, 60);
     });
     Shiny.addCustomMessageHandler("confetti", function (msg) {
       rodentConfetti(msg && msg.big);
     });
-    Shiny.addCustomMessageHandler("loadDone", function () { smtLoadDone(); });
+    Shiny.addCustomMessageHandler("loadDone", function (_msg) { smtLoadDone(); });
     // server-triggered overlay (e.g. a click on the national picker map, which
     // has no inline onclick to call smtLoadStart directly)
     Shiny.addCustomMessageHandler("smtLoadStart", function (msg) {
@@ -177,7 +177,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // tab, or the picker map re-shown after "change site") can paint blank until
     // it recomputes its size. Dispatching 'resize' makes every Leaflet map
     // invalidateSize. The server kicks this after re-showing the splash.
-    Shiny.addCustomMessageHandler("kickMaps", function () {
+    Shiny.addCustomMessageHandler("kickMaps", function (_msg) {
       var kick = function () { try { window.dispatchEvent(new Event("resize")); } catch (e) {} };
       requestAnimationFrame(kick);
       [80, 250, 500, 900].forEach(function (t) { setTimeout(kick, t); });

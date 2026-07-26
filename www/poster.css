@@ -1,0 +1,169 @@
+/* Static Living Poster: the first app screen shares the suite cover language. */
+.splash-map { max-width: none !important; padding-top: 0 !important; }
+.app-skip {
+  position: fixed;
+  z-index: 10050;
+  top: -80px;
+  left: 1rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1rem;
+  border-radius: 999px;
+  color: #10152f !important;
+  background: #f2e7c9;
+  font-weight: 850;
+  text-decoration: none !important;
+}
+.app-skip:focus { top: 1rem; outline: 3px solid #d0dc39; outline-offset: 4px; }
+.living-poster {
+  position: relative;
+  min-height: min(780px, calc(100svh - 68px));
+  display: grid;
+  grid-template-columns: minmax(360px, .9fr) minmax(500px, 1.1fr);
+  align-items: stretch;
+  overflow: hidden;
+  isolation: isolate;
+  margin: 0 -2rem 3.5rem;
+  color: #f2e7c9;
+  background: #10152f;
+  border-radius: 0 0 28px 28px;
+  box-shadow: 0 34px 90px rgba(16, 21, 47, .22);
+}
+.living-poster::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  opacity: .14;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='110' height='110'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.2'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+.lp-topline {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 clamp(2rem, 5vw, 5.5rem);
+  border-bottom: 1px solid rgba(242,231,201,.22);
+}
+.lp-ddl {
+  color: #f2e7c9;
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.lp-driver {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: #75d4df !important;
+  font-size: .75rem;
+  font-weight: 780;
+  text-decoration: none !important;
+}
+.lp-driver:focus-visible { outline: 3px solid #d0dc39; outline-offset: 4px; }
+.lp-copy {
+  z-index: 3;
+  align-self: center;
+  max-width: 680px;
+  padding: clamp(6.2rem, 9vw, 8rem) 1rem clamp(4rem, 7vw, 7rem) clamp(2rem, 5vw, 5.5rem);
+}
+.lp-eyebrow {
+  margin: 0 0 1.35rem;
+  color: #75d4df;
+  font-size: .75rem;
+  font-weight: 850;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+.living-poster h1 {
+  margin: 0;
+  font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Palatino, Georgia, serif;
+  font-size: clamp(4.2rem, 7.3vw, 7.8rem);
+  font-weight: 600;
+  letter-spacing: -.064em;
+  line-height: .86;
+}
+.living-poster h1 span,.living-poster h1 em { display: block; }
+.living-poster h1 em { color: #d0dc39; font-style: normal; }
+.lp-promise {
+  max-width: 31rem;
+  margin: 1.9rem 0 0;
+  color: #c9c4b7;
+  font-size: clamp(1.05rem, 1.5vw, 1.28rem);
+  line-height: 1.55;
+}
+.lp-cta {
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  gap: .7rem;
+  margin-top: 2rem;
+  padding: 0 1.45rem;
+  border-radius: 999px;
+  color: #10152f !important;
+  background: #d0dc39;
+  font-size: .92rem;
+  font-weight: 850;
+  text-decoration: none !important;
+  box-shadow: 0 14px 42px rgba(208,220,57,.18);
+}
+.lp-cta:hover { background: #edf375; }
+.lp-cta:focus-visible { outline: 3px solid #75d4df; outline-offset: 5px; }
+.lp-art { position: relative; min-height: 620px; margin: 0 0 0 -7vw; }
+.lp-art::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,#10152f 0%,rgba(16,21,47,.76) 13%,transparent 45%);
+}
+.lp-art img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: 66% center; }
+.lp-art figcaption {
+  position: absolute;
+  z-index: 3;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  padding: .32rem .62rem;
+  border: 1px solid rgba(242,231,201,.22);
+  border-radius: 999px;
+  color: #f2e7c9;
+  background: rgba(16,21,47,.9);
+  font-size: .69rem;
+  letter-spacing: .035em;
+}
+.picker-intro { max-width: 760px; margin: 0 auto 1.8rem; text-align: center; }
+.picker-kicker { margin: 0 0 .65rem; color: #5e39c4; font-size: .74rem; font-weight: 850; letter-spacing: .17em; text-transform: uppercase; }
+.picker-intro h2 { margin: 0; font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Palatino, Georgia, serif; font-size: clamp(2.3rem,5vw,4.3rem); font-weight: 600; letter-spacing: -.045em; }
+.picker-intro p:last-child { max-width: 650px; margin: 1rem auto 0; color: #625a78; }
+@media (max-width: 900px) {
+  .living-poster { grid-template-columns: 1fr; margin-inline: -1rem; }
+  .lp-copy { padding: 6.1rem 1.6rem 2.2rem; }
+  .lp-art { min-height: 48svh; margin: 0; }
+  .lp-art::before { background: linear-gradient(180deg,#10152f 0%,transparent 38%); }
+}
+@media (max-width: 560px) {
+  .living-poster { margin-inline: -.75rem; border-radius: 0 0 20px 20px; }
+  .lp-topline { margin-inline: 1.1rem; }
+  .lp-ddl { font-size: .62rem; }
+  .lp-driver { font-size: .67rem; }
+  .lp-copy { padding: 5.7rem 1.1rem 1.8rem; }
+  .living-poster h1 { font-size: clamp(3.7rem,18vw,5.2rem); }
+  .lp-art { min-height: 42svh; }
+  .lp-art figcaption { right: .8rem; bottom: .8rem; }
+}
+@media (forced-colors: active) {
+  .living-poster,.lp-cta,.lp-driver,.app-skip { border: 2px solid ButtonText; }
+  .lp-cta,.lp-driver,.app-skip { forced-color-adjust: auto; }
+}

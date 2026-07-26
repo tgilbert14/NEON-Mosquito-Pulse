@@ -1,0 +1,14 @@
+field,layer,unit,meaning,eligibility
+effort_id,effort,,Unique physical day/night trap interval,NEON uid or full event/plot/timestamp/day-night fallback
+sampleID,effort and obs,,Outcome linkage from trapping to sorting,May be absent for supported zeros
+valid_effort,effort,boolean,Interval contributes to denominator,Sampling occurred and positive trapHours with usable identity
+effort_days,effort,24-hour units,trapHours divided by 24,Valid effort only
+outcome_status,effort,category,Positive zero pending/held unknown or ineligible state,Derived before aggregation
+zero_catch,effort,boolean,Supported zero target catch,Valid effort and targetTaxaPresent=N only
+count,obs,estimated mosquitoes,individualCount times expansionFactor,Eligible sort/effort linkage and positive count
+proportionIdentified,obs,0-1,Fraction of catch identified,Must be finite and greater than zero and no more than one
+expansionFactor,obs,multiplier,One divided by proportionIdentified,Never rounded before aggregation
+is_target,obs,boolean,Culicidae target gate,Coarse target records may enter total activity
+is_species,obs,boolean,Accepted species/subspecies gate,Required for richness and incidence
+held_identifications,held,row count,Audit trail for unusable catch records,Never contributes to numerator or supported zero
+mos_per_24h,site index,mosquitoes per 24 trap-hours,Whole-trap target catch divided by valid duration,Within-site activity index only
