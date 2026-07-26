@@ -188,7 +188,9 @@ server <- function(input, output, session) {
 
   # ---- Overview ----
   output$topBar <- renderPlotly({
-    brd <- rv$board; req(brd); brd <- head(brd[order(-brd$index),], 16)
+    brd <- rv$board
+    if (is.null(brd) || !nrow(brd)) return(note_plot("No target mosquitoes detected during valid sampled intervals", "○"))
+    brd <- head(brd[order(-brd$index),], 16)
     brd$lab <- factor(brd$vernacular %||% brd$scientificName, levels = rev(brd$vernacular %||% brd$scientificName))
     plot_ly(brd, x=~index, y=~lab, type="bar", orientation="h", marker=list(color=genus_col(brd$genus)),
       text=~paste0(genus), customdata=~ubiquity,
@@ -197,12 +199,25 @@ server <- function(input, output, session) {
         annotations=list(list(text=sprintf("at <b>%s</b> · this site only · colour = genus", rv$site %||% "this site"), x=0, y=1.07, xref="paper", yref="paper", showarrow=FALSE, xanchor="left", font=list(color=if(is_dark())"#9b91c0" else "#6f6790", size=11))))
   })
   output$overviewInsight <- renderUI({
-    brd <- rv$board; req(brd); top <- brd[which.max(brd$index),]; ubi <- brd[which.max(brd$ubiquity),]
+    brd <- rv$board
+    if (is.null(brd) || !nrow(brd)) return(insight_banner("circle", tone="navy",
+      HTML("NEON recorded valid trap effort here but <b>no eligible target mosquitoes</b>. Supported zero catches stay zero; missed, unknown, and held outcomes are not added to that claim.")))
+    top <- brd[which.max(brd$index),]; ubi <- brd[which.max(brd$ubiquity),]
     insight_banner("activity", tone="navy", HTML(sprintf("<b>%s</b> is the most-active mosquito here (%.2f per 24 trap-hours); <b>%s</b> is the most widespread (on %.0f%% of sampled intervals). The site holds <span class='ci-hero'>%d</span> species.",
       top$vernacular %||% top$scientificName, top$index, ubi$vernacular %||% ubi$scientificName, ubi$ubiquity, nrow(brd))))
   })
   output$siteInsights <- renderUI({
-    brd <- rv$board; req(brd); ch <- chao2_collections(rv$obs, rv$nocc)
+    brd <- rv$board
+    if (is.null(brd) || !nrow(brd)) {
+      valid <- rv$effort[rv$effort$valid_effort %in% TRUE,,drop=FALSE]
+      yrs <- range(valid$year,na.rm=TRUE); yr_lab <- if (yrs[1]==yrs[2]) as.character(yrs[1]) else sprintf("%d–%d",yrs[1],yrs[2])
+      pts <- c(
+        sprintf("Across <b>%s</b>, NEON recorded <b>%s</b> valid day/night trap intervals and <b>%s</b> 24-hour effort units here.",yr_lab,fmt_int(nrow(valid)),fmt_int(sum(valid$effort_days))),
+        sprintf("Of those intervals, <b>%s</b> are supported zero catches (<code>targetTaxaPresent = N</code>). Unknown, unusable, held, and missed outcomes remain separate.",fmt_int(sum(valid$zero_catch))),
+        "No eligible target mosquitoes were identified, so activity is <b>zero for supported sampled intervals</b>; species richness and composition estimates are unavailable rather than invented.")
+      return(tags$ul(class="insight-list",lapply(pts,function(t) tags$li(HTML(t)))))
+    }
+    ch <- chao2_collections(rv$obs, rv$nocc)
     yrs <- range(rv$obs$year, na.rm=TRUE); yr_lab <- if (yrs[1]==yrs[2]) as.character(yrs[1]) else sprintf("%d–%d", yrs[1], yrs[2])
     top <- brd[which.max(brd$index),]; ubi <- brd[which.max(brd$ubiquity),]
     nm <- function(r) r$vernacular %||% r$scientificName
@@ -213,7 +228,7 @@ server <- function(input, output, session) {
       sprintf("The most-active mosquito is <b><i>%s</i></b>, about <b>%.2f</b> per 24 trap-hours; the most <i>widespread</i> is <b><i>%s</i></b>, on <b>%.0f%%</b> of sampled intervals.",
         top$scientificName, top$index, ubi$scientificName, ubi$ubiquity))
     if (length(culex) && !is.na(culex) && culex > 0)
-      pts <- c(pts, sprintf("<b>Culex</b>, the West Nile vector group, makes up about <b>%.0f%%</b> of the catch here. This shows where they are active, not whether any carry a virus.", culex))
+      pts <- c(pts, sprintf("<b>Culex</b> makes up about <b>%.0f%%</b> of the catch here. Some species in this genus are important vectors, but this catch product does not test for a pathogen or measure health risk.", culex))
     if (!is.null(ch)) {
       cov <- site_coverage(rv$obs, rv$nocc)
       if (ch$unstable && is.finite(cov))
@@ -227,7 +242,7 @@ server <- function(input, output, session) {
 
   # ---- genus + sex composition strip ----
   output$compStrip <- renderPlotly({
-    req(rv$obs); gs <- genus_share(rv$obs); sx <- sex_split(rv$obs)
+    req(!is.null(rv$obs)); gs <- genus_share(rv$obs); sx <- sex_split(rv$obs)
     if (is.null(gs) || is.null(sx)) return(note_plot("No composition data"))
     sx$share <- round(100 * sx$count / max(1, sum(sx$count)), 1)
     p <- plot_ly()
@@ -245,7 +260,9 @@ server <- function(input, output, session) {
       xaxis=list(title="% of catch", ticksuffix="%", range=c(0,100)), yaxis=list(title=""), margin=list(l=70, t=20, b=40))
   })
   output$compInsight <- renderUI({
-    req(rv$obs); gs <- genus_share(rv$obs); sx <- sex_split(rv$obs); req(!is.null(gs), !is.null(sx))
+    req(!is.null(rv$obs)); gs <- genus_share(rv$obs); sx <- sex_split(rv$obs)
+    if (is.null(gs) || is.null(sx)) return(insight_banner("circle", tone="terra",
+      "No eligible target catch is available, so genus and sex composition are not estimated."))
     f <- sum(sx$count[sx$sex=="F"]); m <- sum(sx$count[sx$sex=="M"]); u <- sum(sx$count[sx$sex=="U"])
     femp <- if (f + m > 0) round(100 * f / (f + m)) else NA_real_           # of SEXED — same denominator as the hero badge
     pct_u <- round(100 * u / max(1, f + m + u))
@@ -256,7 +273,7 @@ server <- function(input, output, session) {
 
   # ---- The Pulse (signature) ----
   output$pulsePlot <- renderPlotly({
-    req(rv$obs); pk <- pulse_phenology(rv$obs, rv$effw); if (is.null(pk) || nrow(pk) < 2) return(note_plot("Not enough weekly trapping to draw a pulse"))
+    req(!is.null(rv$obs)); pk <- pulse_phenology(rv$obs, rv$effw); if (is.null(pk) || nrow(pk) < 2) return(note_plot("Not enough weekly trapping to draw a pulse"))
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     muted <- if (is_dark()) "#9b91c0" else "#6f6790"
     reg <- precip_regime(cl)
@@ -286,19 +303,21 @@ server <- function(input, output, session) {
       annotations=list(list(text=sprintf("at <b>%s</b>%s", rv$site %||% "this site", band_note), x=0, y=1.1, xref="paper", yref="paper", showarrow=FALSE, xanchor="left", font=list(color=muted, size=11))))
   })
   output$pulseInsight <- renderUI({
-    req(rv$obs); pk <- pulse_phenology(rv$obs, rv$effw); req(!is.null(pk), nrow(pk) >= 2)
+    req(!is.null(rv$obs)); pk <- pulse_phenology(rv$obs, rv$effw); req(!is.null(pk), nrow(pk) >= 2)
+    if (!any(pk$index > 0,na.rm=TRUE)) return(insight_banner("circle", tone="navy",
+      HTML("Valid trapping weeks are shown at <b>zero activity</b>. No target mosquitoes were detected, so this explorer does not estimate a seasonal peak.")))
     pw <- pk$week[which.max(pk$index)]; pm <- format(as.Date("2021-01-01") + (pw*7 - 7), "%B")
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     reg <- precip_regime(cl); desert <- identical(biome_of(rv$site), "desert")
     head_txt <- sprintf("Activity peaks around <b>week %d (%s)</b>. ", pw, pm)
     body <- if (reg == "monsoon")
-      "In this water-limited desert the pulse rides the <b>summer monsoon</b>: rain fills ephemeral water, and adults emerge a couple of weeks later."
+      "The activity peak overlaps this site's <b>summer-monsoon window</b>, a descriptive pattern consistent with rain-created habitat and emergence timing; it does not show that rain caused the peak."
     else if (reg == "summer_rain")
-      "The pulse tracks the site's <b>warm-season rains and warmth</b>. (Most of this site's rain falls outside summer, so this is not a true monsoon system.)"
+      "The activity peak overlaps the site's <b>warm-season rain and warmth</b>. This is descriptive and correlational; most precipitation here falls outside summer, so this is not a monsoon system."
     else if (desert)
-      "This is a desert where the summer monsoon usually drives the pulse, but <b>there is no NEON rain gauge here</b>, so the chart can't show the rain timing behind it."
+      "This is a desert site, but <b>there is no supported NEON rain overlay here</b>, so the chart does not place activity against a local rain window."
     else
-      "In this cooler, wetter system the pulse is paced by <b>warmth and degree-days</b> rather than a summer rain pulse."
+      "This cooler-site pattern is shown beside seasonal warmth, but the observational series does not establish a thermal cause."
     insight_banner("activity", tone="navy", HTML(paste0(head_txt, body)))
   })
   # the signature weekly pulse, as a tidy CSV (one row per ISO week)
@@ -320,7 +339,7 @@ server <- function(input, output, session) {
   # mos_accum is the one non-trivial computation; cache it per-site so it runs ONCE
   # (not once per output, and not again on every dark-mode toggle that re-runs the
   # themed render expr). Keyed only on the data, so theme flips reuse it.
-  accum <- reactive({ req(rv$obs); mos_accum(rv$obs, rv$effort) })
+  accum <- reactive({ req(!is.null(rv$obs)); mos_accum(rv$obs, rv$effort) })
   output$accumPlot <- renderPlotly({
     ac <- accum(); if (is.null(ac)) return(note_plot("Not enough collection occasions for an accumulation curve"))
     plot_ly(ac, x=~occasions, y=~richness, type="scatter", mode="lines", line=list(color=DDL$violet, width=3),
@@ -330,12 +349,17 @@ server <- function(input, output, session) {
   })
   output$accumInsight <- renderUI({
     ac <- accum(); req(!is.null(ac))
+    if (!any(ac$richness > 0)) return(insight_banner("circle", tone="pine",
+      HTML(sprintf("Across <b>%d sampled intervals</b>, no eligible mosquito species accumulated. Supported sampled zeros remain visible; this does not prove mosquitoes were absent outside the trap method.",nrow(ac)))))
     slope <- ac$richness[nrow(ac)] - ac$richness[max(1,nrow(ac)-5)]
     insight_banner("graph-up", tone="pine", HTML(sprintf("By <b>%d</b> sampled intervals, <span class='ci-hero'>%.0f</span> species had turned up.%s",
       ac$occasions[nrow(ac)], ac$richness[nrow(ac)], if (slope > 1) " The curve is still rising; more trapping would find more species." else " The curve is flattening; most catchable species have been found.")))
   })
   output$chaoBanner <- renderUI({
-    ch <- chao2_collections(rv$obs, rv$nocc); req(!is.null(ch)); cov <- site_coverage(rv$obs, rv$nocc)
+    ch <- chao2_collections(rv$obs, rv$nocc)
+    if (is.null(ch)) return(insight_banner("circle", tone="gold",
+      "Species-richness extrapolation is unavailable because no eligible species incidence was observed."))
+    cov <- site_coverage(rv$obs, rv$nocc)
     ci_txt <- if (is.finite(ch$ci_lo) && is.finite(ch$ci_hi)) sprintf("%.0f–%.0f species", ch$ci_lo, ch$ci_hi) else "wide"
     chao_pop <- info_pop("Chao2 estimate",
       p(tags$b("Chao2"), " estimates ", tags$b(sprintf("%.0f", ch$chao2)), " species use the site (95% CI ", tags$b(ci_txt), "; Chao 1987), so roughly ", tags$b(sprintf("%.0f", max(0, round(ch$chao2 - ch$S_obs)))), " remain uncaught."),
@@ -350,7 +374,8 @@ server <- function(input, output, session) {
 
   # ---- Swarm Board (flagship) ----
   output$swarmBoard <- renderPlotly({
-    brd <- rv$board; req(brd)
+    brd <- rv$board
+    if (is.null(brd) || !nrow(brd)) return(note_plot("No species to place: valid sampled intervals had no eligible target catch", "○"))
     brd$reliable <- brd$n_occ_present >= 3
     brd$col <- genus_col(brd$genus); brd$col[!brd$reliable] <- "rgba(138,135,160,0.35)"
     brd$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b><em>", brd$scientificName, "</em></b><br/>",

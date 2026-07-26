@@ -334,7 +334,7 @@ mos_codebook <- function() {
     description = c(
       "Accepted scientific (Latin) name of the mosquito species.",
       "Common name where one exists.",
-      "Genus (Culex, Aedes, Anopheles, Culiseta, Psorophora, ...). Some Culex species are important West Nile virus vectors; this product has no pathogen result.",
+      "Genus (Culex, Aedes, Anopheles, Culiseta, Psorophora, ...). Culex is retained as descriptive taxonomic context; this product has no pathogen or health-risk result.",
       "NEON sample identifier linking a non-empty trap sample to sorting. It may be absent for zero catches, so it is not the incidence key.",
       "Trap key = plotID; DP1.10043.001 deploys one CO2 trap per plot per night (no separate trapID).",
       "NEON plot (grid) identifier, the fixed spot a CO2 trap is set.",
@@ -389,7 +389,7 @@ mos_codebook <- function() {
       "Cross-site CSV: biome label (warm desert, cold desert, grassland, forest, ...).",
       "Cross-site CSV: mean warm-season (summer) air temperature, the degree-day axis for cooler sites. From the env overlays; NA where no gauge.",
       "Cross-site CSV: mean annual air temperature.",
-      "Cross-site CSV: total precipitation in the site's summer-monsoon window (the water-limited driver). NA where no gauge.",
+      "Cross-site CSV: total precipitation in the site's supported summer-rain window, shown as descriptive seasonal context. NA where no gauge.",
       "Cross-site CSV: total annual precipitation.",
       "Cross-site CSV: TRUE if the site has a co-located NEON precipitation gauge; FALSE sites fall back to a climatology and cannot anchor a monsoon window.",
       "Cross-site CSV: total valid trap effort as sum(trapHours/24).",
