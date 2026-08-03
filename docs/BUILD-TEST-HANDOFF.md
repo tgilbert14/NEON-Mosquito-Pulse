@@ -223,3 +223,26 @@ The first production browser pass found `heroStats` and `siteInsights` in generi
   manifest remain unchanged.
 - The next suite action is Driver register reconciliation, followed by the Birds
   product pass.
+
+## 2026-08-03 EDT - restricted publisher repair candidate / Codex
+
+- Audited scheduled refresh run `30736660919`. Its producer and validator stages
+  passed and published exact candidate `ef43cc445d9f3e9b2b4e3fc49968b18255e0e9e6`
+  to `automation/mosquito-release-2026`; only workflow-authored PR creation failed
+  because the repository correctly forbids Actions from creating or approving
+  pull requests.
+- Replaced that prohibited final action with a reviewer-authenticated handoff.
+  The publisher retains its stale-`master` guard, now requires the promotion
+  commit to be a direct child of the validated producer revision, publishes only
+  with a lease, polls the remote branch to its exact SHA, and refuses ambiguous or
+  mismatched PR identity.
+- When no PR exists, the successful run summary exposes the exact branch, head,
+  validator run, and GitHub compare link for a repository write user. When one
+  exact PR exists, the workflow comments the exact-head approval requirement; it
+  never creates or merges a PR and never writes `master`.
+- Local evidence: the workflow parses as YAML, all 12 embedded shell blocks pass
+  `bash -n`, and `git diff --check` passes. This is a workflow-only repair; no
+  scientific helper, bundle, data, manifest, app, or Pages byte changed.
+- Next concrete action: publish this repair through exact-head review CI, merge it,
+  then open and validate the already-produced refresh candidate with a
+  reviewer-authenticated PR before any production promotion.
