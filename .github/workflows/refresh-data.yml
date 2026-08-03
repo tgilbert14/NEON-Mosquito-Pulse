@@ -215,6 +215,8 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin master
           if ! git merge-base --is-ancestor origin/master "$GITHUB_SHA"; then echo "Producer revision does not contain current master; refusing stale publication."; exit 1; fi
+          [[ -d data && ! -L data && -d data-sample && ! -L data-sample ]]
+          find data data-sample -mindepth 1 -delete
           tar -xzf "$RUNNER_TEMP/candidate/mosquito-release-2026.tgz"
           if git diff --quiet -- data data-sample manifest.json; then echo "No validated data change."; exit 0; fi
           branch="automation/mosquito-release-2026"
@@ -224,12 +226,56 @@ jobs:
           git config user.email "neon-data-bot@users.noreply.github.com"
           git add -A data data-sample manifest.json
           git commit -m "data: propose validated mosquito RELEASE-2026 [bot]" -m "Exact 47-site opportunity-complete candidate from ${GITHUB_SHA}."
-          if [ -n "$remote_head" ]; then git push --force-with-lease="refs/heads/$branch:$remote_head" origin "$branch:refs/heads/$branch"; else git push origin "$branch:refs/heads/$branch"; fi
-          pr_url=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url')
-          if [ -z "$pr_url" ]; then
-            if ! gh pr create --base master --head "$branch" --title "data: validated mosquito RELEASE-2026" --body "Immutable 47-site candidate from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Merge is the explicit deploy decision."; then
-              echo "::notice title=Validated review branch ready::GitHub Actions may not create pull requests in this repository. Open a PR from $branch after reviewing run ${GITHUB_RUN_ID}."
-            fi
-          else
-            gh pr comment "$pr_url" --body "Updated from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+          published_commit=$(git rev-parse HEAD)
+          if [[ "$(git rev-parse HEAD^)" != "$GITHUB_SHA" ]]; then
+            echo "Candidate promotion commit is not a direct child of the validated producer revision."
+            exit 1
           fi
+          if [ -n "$remote_head" ]; then git push --force-with-lease="refs/heads/$branch:$remote_head" origin "$branch:refs/heads/$branch"; else git push origin "$branch:refs/heads/$branch"; fi
+          pushed_commit=""
+          for attempt in 1 2 3 4 5; do
+            pushed_commit=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
+            [[ "$pushed_commit" == "$published_commit" ]] && break
+            sleep 2
+          done
+          if [[ "$pushed_commit" != "$published_commit" ]]; then
+            echo "Published branch does not resolve to the validated candidate commit."
+            exit 1
+          fi
+
+          pr_count=$(gh pr list --head "$branch" --base master --state open \
+            --json url --jq 'length')
+          if (( pr_count > 1 )); then
+            echo "More than one open master PR exists for $branch; refusing ambiguous publication."
+            exit 1
+          fi
+          if (( pr_count == 0 )); then
+            compare_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/master...${branch}?expand=1"
+            {
+              echo "### Validated Mosquito review branch ready"
+              echo "- Branch: \`$branch\`"
+              echo "- Exact head: \`$published_commit\`"
+              echo "- Validator run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              echo "- [Open the reviewer-authenticated PR]($compare_url)"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Validated review branch ready::Open a reviewer-authenticated PR from $branch to master after reviewing run ${GITHUB_RUN_ID}; that PR event is the exact-head CI trigger."
+            exit 0
+          fi
+
+          pr_record=""
+          for attempt in 1 2 3 4 5; do
+            pr_record=$(gh pr list --head "$branch" --base master --state open \
+              --json url,baseRefName,headRefName,headRefOid \
+              --jq 'if length == 1 then .[0] | [.url,.baseRefName,.headRefName,.headRefOid] | @tsv else "" end')
+            [[ "$pr_record" == *$'\t'"$published_commit" ]] && break
+            sleep 2
+          done
+          IFS=$'\t' read -r pr_url pr_base pr_head pr_oid <<< "$pr_record"
+          if [[ -z "$pr_record" || "$pr_base" != master || "$pr_head" != "$branch" || \
+                "$pr_oid" != "$published_commit" ]]; then
+            echo "Open PR identity does not match master <- $branch at $published_commit."
+            exit 1
+          fi
+          gh pr comment "$pr_url" \
+            --body "Updated from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. GitHub will hold the pull_request synchronize checks triggered by this automation update for approval; a repository write user must select **Approve workflows to run**. Do not merge until checks are green on exact head ${published_commit}."
+          echo "::notice title=Approve exact-head PR checks::Existing PR updated to $published_commit. A repository write user must select Approve workflows to run, then verify green checks on that exact head."
