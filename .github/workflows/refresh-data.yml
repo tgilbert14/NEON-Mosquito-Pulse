@@ -215,6 +215,8 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin master
           if ! git merge-base --is-ancestor origin/master "$GITHUB_SHA"; then echo "Producer revision does not contain current master; refusing stale publication."; exit 1; fi
+          [[ -d data && ! -L data && -d data-sample && ! -L data-sample ]]
+          find data data-sample -mindepth 1 -delete
           tar -xzf "$RUNNER_TEMP/candidate/mosquito-release-2026.tgz"
           if git diff --quiet -- data data-sample manifest.json; then echo "No validated data change."; exit 0; fi
           branch="automation/mosquito-release-2026"
