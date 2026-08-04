@@ -301,3 +301,24 @@ The first production browser pass found `heroStats` and `siteInsights` in generi
 - Next action: pin this clarified package in the central Driver synthesis ledger;
   keep mosquito ecological ingestion held until an independent adapter, registered
   model, and old/new parity review clear the Driver gate.
+
+## 2026-08-04 EDT · [Codex] exact-manifest CI dependency repair
+
+- PR #10 validation run `30940598982` passed the scientific helper contracts,
+  exact release/bundle checks, offline source check, and real SRER server render.
+  Its final byte gate correctly failed because the validation environment resolved
+  bare `bslib` to current CRAN `0.12.0`, while the committed exact manifest records
+  `bslib` `0.11.0` from the dated release environment.
+- Pinned `bslib@0.11.0` in both manifest-producing dependency lists:
+  `.github/workflows/ci.yml` and the validator job in
+  `.github/workflows/refresh-data.yml`. Rolled only those two dependency-cache keys
+  so an older resolved library cannot mask the corrected pin.
+- YAML parsing, the two-workflow pin/cache static audit, local parsing of
+  `scripts/write_manifest.R`, changed-path review, and `git diff --check`: PASS.
+- This is a CI/release-platform repair. No source product, bundle, estimator,
+  application, Pages asset, committed manifest, or Driver artifact changed; the
+  suite-contract ADOPT versus ecological CONTEXT/HOLD split remains unchanged.
+- Residual risk: exact Linux R 4.5.2 installation and byte-identical manifest
+  reproduction require the amended GitHub run.
+- Next action: push the amended exact PR head, require the contracts check to pass,
+  then merge by that reviewed head and record the merged/default-branch receipts.
