@@ -246,3 +246,58 @@ The first production browser pass found `heroStats` and `siteInsights` in generi
 - Next concrete action: publish this repair through exact-head review CI, merge it,
   then open and validate the already-produced refresh candidate with a
   reviewer-authenticated PR before any production promotion.
+
+## 2026-08-04 EDT · [Codex] suite-synthesis governance clarification
+
+### Scope and decision
+
+- Documentation-only clarification on branch
+  `agent/suite-synthesis-mosquito-governance`, based on clean current default head
+  `c86d775b8870995018818a48199899ca5670fc53`.
+- The Driver knowledge package now records two independent axes. **ADOPT** applies
+  to the opportunity/outcome-state reconciliation and restricted,
+  reviewer-authenticated publisher contracts. The ecological signal remains
+  **CONTEXT / HOLD DRIVER INGESTION / NO DRIVER BYTE CHANGE**.
+- No runtime, source, data, bundle, estimator, manifest, Pages asset, or workflow
+  file changed in this clarification.
+
+### Exact authority and synthesis evidence
+
+- Science/data/runtime authority remains `935420e1e1aa79dcc3cf54d03ef150f6f0332b8d`;
+  documentation/receipt authority remains
+  `91b4c713ebbdc717128de584273b995ec49dd622`.
+- Compact Pages authority remains
+  `ec0f2ba4df71040d1760c23338da39233b92db96`; cover receipt remains
+  `6450f0197ac3ee535c0059b80a5e041b5dfe0b9a`.
+- Current default/workflow head
+  `c86d775b8870995018818a48199899ca5670fc53` is platform-only. Current-head
+  validation `30819020636`, Pages `30819018628`, production smoke `30819021005`,
+  and full refresh workflow `30863101351` are green.
+- Measured Driver synthesis diagnostic: 203 app-supported site-years; 200 direct
+  Driver-calendar matches across 46 sites; 7 sites with at least 6 matched
+  supported years. PUUM is outside the Driver site roster. This support is a
+  compatibility diagnostic, not an eligible adapter, registered model, or vote.
+
+### Commands and outcomes
+
+- `git status --short --branch`; `git branch --show-current`; `git rev-parse HEAD`:
+  PASS — clean starting tree on the expected branch and exact default head.
+- Complete reads of `AGENTS.md`, `docs/BUILD-TEST-HANDOFF.md`,
+  `docs/SCIENCE-CONTRACT.md`, `docs/DRIVER-KNOWLEDGE-PACKAGE.md`, and the Driver's
+  `docs/NEON-SUITE-LEARNING-LOOP.md`, `docs/NEON-SUITE-REVAMP-PLAN.md`, and
+  `docs/neonize-playbook.md`: PASS — local and central decision vocabulary agree.
+- `git log --oneline --decorate -12`; `git show --stat --oneline --summary` for
+  `c86d775`, `935420e`, `91b4c71`, `ec0f2ba`, and `6450f01`: PASS — the authority
+  domains and platform-only current head are locally present and distinct.
+- `git diff --check`; required-decision/revision text scan; changed-path allowlist:
+  PASS — documentation is internally explicit and only the knowledge package plus
+  this append-only handoff changed.
+
+### Residual risk and next action
+
+- No Driver adapter or registered mosquito mechanism exists. The measured calendar
+  overlap cannot be promoted from support to inference without those independent
+  gates; PUUM's climate placement also remains held.
+- Next action: pin this clarified package in the central Driver synthesis ledger;
+  keep mosquito ecological ingestion held until an independent adapter, registered
+  model, and old/new parity review clear the Driver gate.

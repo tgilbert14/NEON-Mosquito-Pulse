@@ -1,8 +1,19 @@
 # Driver knowledge package · Mosquito Pulse
 
-## Decision
+## Decision — two explicit axes
 
-**ADOPT** — The suite should adopt outcome-state reconciliation for every opportunity-complete sampling product: positive, supported zero, unavailable/unknown, held, and ineligible are distinct states before aggregation.
+**Scientific-contract and suite-platform axis: ADOPT.** The suite should adopt
+outcome-state reconciliation for every opportunity-complete sampling product:
+positive, supported zero, unavailable/unknown, held, and ineligible are distinct
+states before aggregation. It should also adopt the independently validated
+producer/validator plus restricted, reviewer-authenticated publisher contract.
+
+**Ecological Driver axis: CONTEXT / HOLD DRIVER INGESTION / NO DRIVER BYTE
+CHANGE.** Whole-trap-scaled target catch per 24 trap-hours remains a within-site
+activity index. The released support and calendar overlap do not by themselves
+define an eligible Driver adapter, registered seasonal/thermal model, or ecological
+vote. Do not infer mosquito population, biting rate, pathogen presence, infection,
+transmission, exposure, disease risk, or a causal climate response.
 
 ## Evidence
 
@@ -18,6 +29,18 @@
 `mos_trapping effort interval` ←(`sampleID`, optional on zero catch)→ `mos_sorting` ←(`subsampleID`)→ `mos_expertTaxonomistIDProcessed`
 
 The leftmost effort table owns identity, validity, and duration. Downstream catch rows cannot create opportunities.
+
+### Driver synthesis diagnostic · 2026-08-04
+
+- The reviewed release contributes 203 app-supported mosquito site-years.
+- Exactly 200 of those site-years match the Driver calendar, across 46 Driver
+  sites; 7 sites have at least 6 matched supported years.
+- PUUM is the one released mosquito site outside the Driver site roster. Its
+  mosquito bundle remains eligible in the app, while its climate-gradient overlay
+  remains held.
+- These are measured compatibility diagnostics, not an ingestion decision.
+  Calendar support alone is not an eligible adapter or a registered model, so no
+  ecological vote or Driver byte follows from the match count.
 
 ## Engineering learning
 
@@ -47,6 +70,25 @@ Audit other sampling apps for a binary catch/absence model that lacks pending/he
 - Final manifest: R 4.5.2, 91 packages, 112 runtime files; SHA-256 `acef14509ce44347d53a99b252cd92814797df1698b5a4365c9e0ac0724cc4ce`.
 - Final exact merge CI `30213225754`, Pages `30213225369`, and production smoke `30213225753`: passed.
 - Fresh production browser session at 390 px: zero Shiny output errors before and after loading SRER, no overflow, and all 19 audited in-app interaction targets at least 44 × 44 CSS px.
+
+## Authority separation and current platform head · 2026-08-04
+
+- Science/data/runtime authority remains
+  `935420e1e1aa79dcc3cf54d03ef150f6f0332b8d`; its documentation/receipt authority
+  remains `91b4c713ebbdc717128de584273b995ec49dd622`.
+- Compact Pages authority remains
+  `ec0f2ba4df71040d1760c23338da39233b92db96`; its cover receipt remains
+  `6450f0197ac3ee535c0059b80a5e041b5dfe0b9a`.
+- Current default/workflow head
+  `c86d775b8870995018818a48199899ca5670fc53` is platform-only. It repairs the
+  restricted refresh handoff and exact-review-byte checks; it changes no source,
+  scientific helper, bundle, estimator, manifest, runtime, Pages presentation, or
+  ecological disposition.
+- Current-head validation `30819020636`, Pages `30819018628`, and production
+  smoke `30819021005` passed. Full refresh workflow `30863101351` also passed.
+- Therefore the top-level split remains deliberate: **ADOPT** the reusable
+  opportunity/outcome-state and restricted-publisher contracts; keep the mosquito
+  ecological signal **CONTEXT / HOLD DRIVER INGESTION / NO DRIVER BYTE CHANGE**.
 
 ## Living Poster flow correction · 2026-07-26
 
