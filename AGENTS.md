@@ -26,7 +26,10 @@ Start and end every session with `git status --short --branch`. Preserve changes
 3. A refresh builds all 47 release sites in empty staging, verifies the exact roster and science contract, and publishes a review PR. It never writes unchecked bytes to `master`.
 4. Every custom Shiny message handler accepts exactly one payload argument.
 5. A release needs green checks on the exact PR head and merge, exact manifest equality, Connect's `mosquito-pulse-v1` marker, and Pages' `mosquito-pulse-poster-v1` marker.
-6. The Pages and app covers use the static Living Poster, local responsive art, explicit illustration labeling, and recorded provenance.
+6. The Pages and app covers use the static Living Poster, local responsive art,
+   descriptive alternative text, durable recorded provenance, and an accurate
+   unlit CO₂ fan-trap depiction. Keep visible illustration badges and captions off
+   the poster face.
 
 ## Durable closeout
 

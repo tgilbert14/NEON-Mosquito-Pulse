@@ -83,8 +83,10 @@ Eligibility requires one unambiguous sorting record per `subsampleID` and `0 < p
 NEON documentation calls the equipment a CDC light-trap assembly, but the
 sampling protocol removes the bulb and deploys it without light; CO₂ is the lure.
 Both Living Posters therefore show a moonlit scene and an unlit fan trap. Both
-surfaces explicitly identify the art as illustration rather than field
-documentation or a data record.
+surfaces require descriptive alternative text, and `docs/ART-PROVENANCE.md`
+durably records the illustration source, prompt, derivation, and checksums. The
+poster face carries no visible illustration badge or caption; scientific claims
+and apparatus details never derive from the artwork.
 
 ## Primary references
 

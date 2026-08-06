@@ -322,3 +322,64 @@ The first production browser pass found `heroStats` and `siteInsights` in generi
   reproduction require the amended GitHub run.
 - Next action: push the amended exact PR head, require the contracts check to pass,
   then merge by that reviewed head and record the merged/default-branch receipts.
+
+## 2026-08-05 19:34:41 MST · [Codex] visible art-label removal candidate
+
+### Scope and contract
+
+- Work began from clean exact `origin/master`
+  `ff505c9f64dd3b99bc543f4078eb2e4dddb6a0f1` on branch
+  `agent/remove-cover-art-disclaimer`. The watched production branch remains
+  `master`; Pages remains <https://tgilbert14.github.io/NEON-Mosquito-Pulse/>,
+  and the git-backed Connect app remains
+  <https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/>.
+  Nothing was pushed, merged, dispatched, or deployed in this local pass.
+- Removed only the visible Pages label “Editorial illustration—not a field
+  photograph or data record.” and in-app label “Illustration · not a
+  measurement,” plus their caption-only CSS. Descriptive alt text remains exact
+  on both surfaces and still identifies the screenprint, mosquito, moonlit
+  wetland, and scientifically accurate unlit CO₂ fan trap with cooler, hose, fan,
+  and catch cup. The local art and social bytes are unchanged.
+- The current policy now makes the boundary durable without an on-face badge:
+  `AGENTS.md`, `docs/SCIENCE-CONTRACT.md`, `docs/ART-PROVENANCE.md`,
+  `docs/neonize-playbook.md`, and `docs/DRIVER-KNOWLEDGE-PACKAGE.md` require
+  descriptive alt text, recorded provenance, and protocol-accurate unlit-trap
+  depiction while prohibiting a visible art badge/caption. Historical entries in
+  this handoff were preserved verbatim.
+- `scripts/check_cover.mjs` replaces both hard presence requirements with explicit
+  absence assertions for both retired labels and for Pages/app `figcaption`
+  markup. It retains the existing descriptive-alt, exact asset-hash, local-only,
+  hook/promise/CTA, one-Driver-route, and compact scientific-disclosure gates.
+
+### Local verification and generated-byte boundary
+
+- PASS on Node `v24.4.1` and R `4.5.3`: cover-checker syntax and complete cover
+  contract; five-handler contract; both app JavaScript parses; all app/helper/
+  script R parses; post-deploy shell parse; and final `git diff --check`.
+- The package-complete scientific helper, real-server, and bundle-verifier
+  commands were attempted but stopped before assertions because the local library
+  lacks `dplyr`, `shiny`, and `tibble`. `Rscript --vanilla
+  scripts/write_manifest.R` stopped before writing because local `rsconnect` is
+  absent. The tracked manifest was not hand-edited; its `ui.R` and
+  `www/poster.css` checksums remain a required pinned-validator promotion.
+- Exact promotion route after pushing the review commit: dispatch workflow
+  `Propose immutable NEON mosquito refresh` on that branch with
+  `skip_download=true`. Its pinned R 4.5.2 validator regenerates and verifies the
+  release, then uploads `mosquito-release-2026-<reviewed-head>` containing
+  `data/`, `data-sample/`, and `manifest.json`. Inspect the artifact, promote only
+  its exact `manifest.json` for this unchanged-data scope, and rerun exact-head CI.
+  The ordinary CI workflow does not upload a validated manifest candidate.
+- Decision: **NONE / NO DRIVER BYTE CHANGE** (`cover-system`, `suite-platform`).
+  No release source, opportunity/outcome state, effort, expansion, estimator,
+  support, bundle, search index, ecological disposition, or Driver artifact
+  changed. No repository temporary artifact required cleanup.
+
+### Next action
+
+Push the local commit for review, use the pinned artifact route above to promote
+the exact manifest, and merge only a green exact head. Production is an automatic
+git-backed publish from watched `master`; `.github/workflows/post-deploy.yml` does
+not deploy. Its `Verify Mosquito production` workflow runs on the merge (and can
+be manually dispatched) and must observe Pages marker
+`mosquito-pulse-poster-v1` plus Connect marker `mosquito-pulse-v1` with no host
+error before responsive/browser acceptance.

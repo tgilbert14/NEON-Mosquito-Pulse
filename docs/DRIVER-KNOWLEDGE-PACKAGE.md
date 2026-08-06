@@ -48,7 +48,10 @@ The leftmost effort table owns identity, validity, and duration. Downstream catc
 - Exact site rosters are release contracts. Numeric minimum thresholds are not.
 - A release receipt needs product, release, DOI, generation date, per-site row counts, and raw digest.
 - Keep build-only download packages outside the deploy manifest.
-- Static cover art should be local, checksum-locked, labeled as illustration, and reused between Pages and the app.
+- Static cover art should be local, checksum-locked, described by meaningful alt
+  text, backed by durable provenance, and reused between Pages and the app. The
+  depicted trap must match the protocol; the poster face needs no visible art
+  badge or caption.
 - Semantic ready markers make deployment health testable; HTTP 200 alone is insufficient.
 
 ## Suite implication
@@ -101,9 +104,9 @@ manifest, app runtime, Driver adapter, or ecological disposition changed.
 
 Reusable suite rule: a cover can preserve the load-bearing zero/missing and claim
 boundary in one collapsed disclosure without turning the first impression into a
-methods page. Artwork-first mobile order, one Driver route, one CTA, explicit
-illustration labeling, and 44 px primary/disclosure controls remain part of the
-shared frame.
+methods page. Artwork-first mobile order, one Driver route, one CTA, descriptive
+alt text, durable provenance, accurate scientific depiction, no visible art badge,
+and 44 px primary/disclosure controls remain part of the shared frame.
 
 ### Published cover authority
 
@@ -117,3 +120,18 @@ shared frame.
 - The prior `935420e` runtime/science disposition remains authoritative for the
   Connect product; `ec0f2ba` supersedes only the earlier verbose Pages-cover
   presentation.
+
+## Visible art-label refinement · 2026-08-05
+
+**NONE / NO DRIVER BYTE CHANGE** — Pages and the in-app poster remove only their
+visible illustration badges. Both retain descriptive alt text naming the
+screenprint and accurate unlit CO₂ fan-trap components, while
+`docs/ART-PROVENANCE.md` retains the generator, prompt, derivation, dimensions,
+and exact hashes. Executable absence assertions prevent either label or a visible
+caption from returning.
+
+The opportunity/outcome-state and restricted-publisher contracts remain
+**ADOPT**; the ecological signal remains **CONTEXT / HOLD DRIVER INGESTION / NO
+DRIVER BYTE CHANGE**. No release source, bundle, effort, zero, expansion,
+estimator, join, support, adapter, vote, or Driver artifact changes in this
+presentation-only refinement.
