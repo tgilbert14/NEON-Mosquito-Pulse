@@ -10,7 +10,6 @@ const requiredCover = [
   "Choose a field site",
   "Desert Data Labs",
   "NEON-Driver-Cascade",
-  "Editorial illustration—not a field photograph or data record.",
   "What am I looking at?",
   "assets/mosquito-living-poster-v1.webp",
 ];
@@ -20,12 +19,21 @@ const requiredApp = [
   "What rises",
   "after rain?",
   "assets/mosquito-living-poster-v1.webp",
-  "Illustration · not a measurement",
   "NEON-Driver-Cascade",
   "Skip to site picker",
 ];
 for (const value of requiredCover) if (!cover.includes(value)) throw new Error(`cover missing ${value}`);
 for (const value of requiredApp) if (!ui.includes(value)) throw new Error(`app poster missing ${value}`);
+for (const [source, surface] of [[cover, "Pages"], [ui, "app"]]) {
+  for (const label of [
+    "Editorial illustration—not a field photograph or data record.",
+    "Illustration · not a measurement",
+  ]) {
+    if (source.includes(label)) throw new Error(`${surface} poster must not restore the visible illustration disclaimer`);
+  }
+}
+if (/<figcaption\b/i.test(cover)) throw new Error("Pages poster must not restore a visible art caption");
+if (/tags\$figcaption\s*\(/.test(ui)) throw new Error("app poster must not restore a visible art caption");
 const coverFace = cover.match(/<main id="main" class="poster"[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
 if (!coverFace) throw new Error("cover face must be the main poster landmark");
 if ((coverFace.match(/class="button"/g) ?? []).length !== 1) throw new Error("cover face must have exactly one contextual CTA");
