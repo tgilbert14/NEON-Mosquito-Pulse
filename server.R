@@ -534,7 +534,7 @@ server <- function(input, output, session) {
     # visible violet ramp (never near-white) so low-metric markers still read on a light basemap
     pal <- leaflet::colorNumeric(c("#cdb6ff","#9d7bff","#7c52e0","#4226a0"), domain=dom)
     rr <- range(g$richness, na.rm=TRUE); g$radius <- if (diff(rr)>0) 9 + 13*(g$richness-rr[1])/diff(rr) else 12
-    leaflet::leaflet(g) %>% leaflet::addProviderTiles(input$view %||% "Esri.WorldTopoMap") %>%
+    leaflet::leaflet(g) %>% add_suite_basemap(input$view %||% "Esri.WorldTopoMap") %>%
       leaflet::addCircleMarkers(lng=~lng, lat=~lat, radius=~radius, fillColor=pal(val), color="#2a2342", weight=1.5, fillOpacity=0.9,
         layerId=~plotID,
         label=~lapply(sprintf("<div style='font-family:system-ui,sans-serif'><b>%s</b> · %d species · %s / 24 trap-hours<br><span style='color:#7c52e0;font-weight:700'>\U0001F446 click for the species list</span></div>", short_point(plotID), richness, ifelse(is.na(per_24h),"—",per_24h)), htmltools::HTML)) %>%
@@ -575,7 +575,7 @@ server <- function(input, output, session) {
       # no bundles yet: show the network as muted dots (not a blank map) so it's
       # clear data hasn't been built; the no-data banner above explains how.
       nd <- neon_sites; nd$biome <- biome_of(nd$site); nd$bcol <- biome_col(nd$biome)
-      return(leaflet::leaflet(nd) %>% leaflet::addProviderTiles("CartoDB.Positron") %>% leaflet::setView(-96, 41, 3) %>%
+      return(leaflet::leaflet(nd) %>% add_suite_basemap("CartoDB.Positron") %>% leaflet::setView(-96, 41, 3) %>%
         leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = 6, fillColor = ~bcol, color = "#fff", weight = 1, fillOpacity = 0.35,
           label = ~lapply(sprintf("<b>%s</b> · %s<br><span style='color:#9a5f08'>data not built yet</span>", site, name), htmltools::HTML),
           popup = "<div style='font-family:system-ui,sans-serif'>No data is bundled yet.</div>"))
@@ -585,7 +585,7 @@ server <- function(input, output, session) {
     rr <- range(d$taxa, na.rm = TRUE); d$rad <- 6 + 11 * (d$taxa - rr[1]) / max(1, diff(rr))
     pop <- sprintf("<div style='font-family:system-ui,sans-serif;min-width:170px'><b>%s · %s</b><br><span style='color:#6f6790'>%s · %s</span><br><b>%s</b> species · <b>%s</b> / 24 trap-hours<br><a href='#' style='color:#7c52e0;font-weight:700' onclick=\"smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;\">\U0001F99F Explore this site &rarr;</a></div>",
                    d$site, d$name, d$blab, d$state, d$taxa, d$mos_per_24h %||% "—", gsub("'", "", d$name), d$site)
-    leaflet::leaflet(d) %>% leaflet::addProviderTiles("CartoDB.Positron") %>% leaflet::setView(-96, 41, 3) %>%
+    leaflet::leaflet(d) %>% add_suite_basemap("CartoDB.Positron") %>% leaflet::setView(-96, 41, 3) %>%
       leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~rad, fillColor = ~bcol, color = "#fff", weight = 1, fillOpacity = 0.85,
         label = ~lapply(sprintf("<b>%s</b> · %s<br>%s · %s species", site, name, blab, taxa), htmltools::HTML), popup = pop) %>%
       leaflet::addLegend("bottomright", colors = unname(BIOME_COL), labels = unname(BIOME_LAB), title = "Biome", opacity = 0.9)
