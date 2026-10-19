@@ -21,6 +21,30 @@ if (!length(sites)) stop("No requested sites are in the canonical roster", call.
 cat(sprintf("Fetching %s %s for %d sites (%s through %s)\n",
             product, release, length(sites), start_month, end_month))
 
+# NEON's own per-site coverage for this release, from the anonymous products
+# endpoint. verify_bundle.R gates every bundle's coverage against it.
+product_meta <- jsonlite::fromJSON(sprintf(
+  "https://data.neonscience.org/api/v0/products/%s?release=%s", product, release))$data$siteCodes
+available <- setNames(lapply(product_meta$availableMonths, function(m) sort(as.character(m))),
+                      product_meta$siteCode)
+missing_coverage <- setdiff(sites, names(available)[lengths(available) > 0L])
+if (length(missing_coverage)) stop("NEON lists no ", release, " availableMonths for: ",
+                                   paste(missing_coverage, collapse = ", "), call. = FALSE)
+
+# Fixed row order on NEON's uid so the staged raw file and its md5 do not
+# change when neonUtilities returns the same release in a different order.
+mos_sort_raw <- function(raw) {
+  for (t in names(raw)) {
+    d <- raw[[t]]
+    if (is.data.frame(d) && "uid" %in% names(d)) {
+      d <- d[order(d$uid, method = "radix"), , drop = FALSE]
+      rownames(d) <- NULL
+      raw[[t]] <- d
+    }
+  }
+  raw
+}
+
 rows <- list()
 for (site in sites) {
   path <- file.path(out_dir, paste0(site, "_raw.rds"))
@@ -37,6 +61,7 @@ for (site in sites) {
       ),
       error = function(e) stop(site, " fetch failed: ", conditionMessage(e), call. = FALSE)
     )
+    raw <- mos_sort_raw(raw)
     saveRDS(raw, path, compress = "xz", version = 3)
   }
   required <- c("mos_trapping", "mos_sorting", "mos_expertTaxonomistIDProcessed")
@@ -47,7 +72,11 @@ for (site in sites) {
     release_generated = "2026-01-23", site = site,
     trapping_rows = nrow(raw$mos_trapping), sorting_rows = nrow(raw$mos_sorting),
     identification_rows = nrow(raw$mos_expertTaxonomistIDProcessed),
-    raw_md5 = unname(tools::md5sum(path)), stringsAsFactors = FALSE
+    raw_md5 = unname(tools::md5sum(path)),
+    available_first_month = available[[site]][1L],
+    available_last_month = available[[site]][length(available[[site]])],
+    available_month_count = length(available[[site]]),
+    stringsAsFactors = FALSE
   )
 }
 

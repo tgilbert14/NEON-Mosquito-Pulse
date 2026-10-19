@@ -45,9 +45,42 @@ mos_is_species <- function(rank, scientific_name, qualifier = NULL) {
   accepted & !ambiguous & !uncertain
 }
 
+# samplingImpractical code-to-meaning map, from NEON User Guide vH Table 1
+# (DP1.10043.001): "OK" means sampling occurred at the intended plot and time;
+# every other documented code names why it did not. NA (the rows that predate
+# the field) is a normal interval. Any other value stops the build so a new or
+# misspelled code can never silently move effort in or out of the denominator.
+MOS_SAMPLING_CODES <- c(
+  "ok" = TRUE,
+  "location snow covered" = FALSE,
+  "location flooded" = FALSE,
+  "temperature low" = FALSE,
+  "logistical" = FALSE,
+  "management" = FALSE,
+  "extreme weather" = FALSE,
+  "other" = FALSE
+)
+
 mos_sampling_occurred <- function(x) {
   value <- tolower(mos_chr(x))
-  is.na(value) | value %in% c("n", "no", "none", "not applicable", "sampling occurred")
+  unknown <- sort(unique(value[!is.na(value) & !(value %in% names(MOS_SAMPLING_CODES))]))
+  if (length(unknown)) stop("unknown samplingImpractical value(s): ",
+                            paste0("'", unknown, "'", collapse = ", "), call. = FALSE)
+  is.na(value) | unname(MOS_SAMPLING_CODES[value]) %in% TRUE
+}
+
+# Stable row order for a bundle table: the given key columns first, then every
+# remaining column, so the same release always serialises to the same bytes.
+mos_canonical_order <- function(d, keys) {
+  if (!nrow(d)) return(d)
+  cols <- c(keys, setdiff(names(d), keys))
+  ord <- do.call(order, c(lapply(cols, function(k) {
+    v <- d[[k]]
+    if (is.list(v)) vapply(v, function(z) paste(z, collapse = "|"), character(1)) else v
+  }), list(na.last = TRUE, method = "radix")))
+  out <- d[ord, , drop = FALSE]
+  rownames(out) <- NULL
+  out
 }
 
 mos_effort_key <- function(trapping) {
@@ -258,6 +291,11 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
     schema_version = "mosquito-pulse-opportunity-v1",
     metric_label = "mosquitoes per 24 trap-hours"
   )
+  effort <- mos_canonical_order(effort, c("collectTimestamp", "plotID", "nightOrDay", "effort_id"))
+  obs <- mos_canonical_order(obs, c("collectDate", "effort_id", "scientificName", "sex"))
+  held <- mos_canonical_order(as.data.frame(held), c("effort_id", "subsampleID", "scientificName"))
+  traps <- mos_canonical_order(as.data.frame(traps), "plotID")
+  effort_week <- mos_canonical_order(as.data.frame(effort_week), c("year", "week"))
   list(obs = tibble::as_tibble(obs), effort = tibble::as_tibble(effort),
        traps = tibble::as_tibble(traps), effort_week = tibble::as_tibble(effort_week),
        held_identifications = tibble::as_tibble(held), meta = meta)

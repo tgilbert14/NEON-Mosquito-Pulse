@@ -304,7 +304,12 @@ mos_qc <- function(obs, sci, traps = NULL) {
   add("info", "Non-mosquito bycatch", "bycatch", which(tgt2 %in% FALSE),
       "Rows flagged as bycatch (non-Culicidae) appear in this species' records. Bycatch is excluded from the activity index and richness, listed here for transparency.")
   # 6 — uncertain identification (excluded from richness, kept in the total index)
-  add("info", "Uncertain identification", "uncertain", which((nzchar(iq)) | (("taxonRank" %in% names(d)) & !(d$taxonRank %in% c("species","subspecies")))),
+  # Count exactly the rows the richness gate drops. nzchar(NA) is TRUE in R, so
+  # the qualifier fallback (for bundles without is_species) must test NA first.
+  unc <- if ("is_species" %in% names(d)) !(d$is_species %in% TRUE) else
+    (!is.na(iq) & nzchar(iq) & !(tolower(iq) %in% c("na","none","not applicable"))) |
+      (("taxonRank" %in% names(d)) & !(d$taxonRank %in% c("species","subspecies")))
+  add("info", "Uncertain identification", "uncertain", which(unc),
       "An identification qualifier (for example 'cf.' or 'near') or a coarser-than-species rank is recorded. These are excluded from richness but kept in the total activity index.")
   # 7 — daytime interval (a STANDARD half of a NEON bout, not an error). Per the
   # TOS protocol (NEON.DOC.014049) a bout = one night interval + the following day

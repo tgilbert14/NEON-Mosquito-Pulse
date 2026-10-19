@@ -23,6 +23,8 @@ The stable key is:
 
 An opportunity enters the activity denominator only when sampling occurred, `trapHours > 0`, and plot/date identity is usable. Its continuous contribution is `trapHours / 24`.
 
+"Sampling occurred" is read from `samplingImpractical` through an explicit code map taken from the NEON User Guide (vH, Table 1): `OK` and a missing value (rows that predate the field) mean the interval was sampled; `Location snow covered`, `Location flooded`, `Temperature low`, `Logistical`, `Management`, `Extreme weather` and `Other` mean it was not. Any other value stops the bundle build. The validator (`scripts/verify_bundle.R`) re-checks the vocabulary with its own copy of the list, fails any site where an `OK` or missing-code interval is classed not sampled, and fails any site whose last valid interval trails NEON's last available month for the release (recorded in the source receipt from the products endpoint) by more than six months.
+
 Protocol eras remain explicit:
 
 - 2013–2017: two nighttime intervals plus the intervening daytime interval per bout.

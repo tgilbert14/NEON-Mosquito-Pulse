@@ -19,7 +19,7 @@ trapping <- tibble::tibble(
   trapHours = c(12, 12, 24, 12),
   nightOrDay = c("night", "day", "night", "night"),
   targetTaxaPresent = c("Y", "N", "Y", NA_character_),
-  samplingImpractical = c(NA, NA, NA, "Road closure"),
+  samplingImpractical = c(NA, "OK", NA, "logistical"),
   sampleCondition = "No known compromise",
   fanStatus = "OK", catchCupStatus = "OK", CO2Status = "OK",
   decimalLatitude = 32, decimalLongitude = -111, nlcdClass = "shrub"
@@ -57,6 +57,41 @@ expect(sum(bundle$obs$is_species) == 1L, "genus-level rows must not pass the spe
 expect(!mos_is_species("species", "Aedes vexans", "cf."),
        "qualified or uncertain identifications must remain in totals but not species richness")
 expect(any(bundle$effort$outcome_status == "catch_unusable_or_pending"), "held catches must not be relabeled zero")
+status_of <- function(uid) bundle$effort$effort_status[bundle$effort$source_uid == uid]
+expect(identical(status_of("u-day"), "valid_sampled"),
+       "samplingImpractical 'OK' (NEON User Guide Table 1: sampling occurred) must be valid effort")
+expect(identical(status_of("u-missed"), "not_sampled"), "a documented impractical code must be not sampled")
+expect(identical(mos_sampling_occurred(c(NA, "OK", " ok ", "other", "Temperature low", "Location snow covered")),
+                 c(TRUE, TRUE, TRUE, FALSE, FALSE, FALSE)),
+       "the samplingImpractical map must accept NA and OK and reject every documented impractical code")
+expect(tryCatch({ mos_sampling_occurred(c("OK", "Road closure")); FALSE }, error = function(e) TRUE),
+       "an unknown samplingImpractical code must stop the producer")
+expect(tryCatch({ mos_build_effort(dplyr::mutate(trapping, samplingImpractical = "sampled"), "TEST"); FALSE },
+                error = function(e) TRUE),
+       "an unknown samplingImpractical code must stop the bundle build, not drop effort")
+shuffled <- mos_build_bundle(list(
+  mos_trapping = trapping[c(4, 2, 1, 3), ],
+  mos_sorting = sorting[2:1, ],
+  mos_expertTaxonomistIDProcessed = ident[c(3, 1, 2), ]
+), "TEST")
+expect(identical(shuffled, bundle), "bundle rows must be in canonical order whatever order NEON returns")
+
+qc_obs <- tibble::tibble(
+  scientificName = "Culex tarsalis", sampleID = c("s1", "s2"), plotID = "TEST_001", trapID = "001",
+  year = 2024L, collectDate = as.Date("2024-07-02"), sex = "F", count = c(3, 4), trapHours = 12,
+  targetTaxaPresent = "Y", sampleCondition = "No known compromise", nightOrDay = "night",
+  expansionFactor = 1, taxonRank = "species", is_target = TRUE,
+  identificationQualifier = c(NA_character_, "cf. species"),
+  is_species = mos_is_species("species", "Culex tarsalis", c(NA_character_, "cf. species"))
+)
+qc_uncertain <- function(d) {
+  f <- Filter(function(x) identical(x$key, "uncertain"), mos_qc(d, "Culex tarsalis")$flags)
+  if (length(f)) f[[1]]$n else 0L
+}
+expect(qc_uncertain(qc_obs) == 1L,
+       "only the 'cf.' row may raise the uncertain-identification flag; an NA qualifier is certain")
+expect(qc_uncertain(qc_obs[, setdiff(names(qc_obs), "is_species")]) == 1L,
+       "the qualifier fallback must not treat NA as a qualifier (nzchar(NA) is TRUE)")
 
 board <- vector_board(bundle$obs, bundle$meta$n_occ_attempted, bundle$meta$effort_days)
 headline <- site_vectors(bundle$obs, bundle$meta$n_occ_attempted, bundle$meta$effort_days,
