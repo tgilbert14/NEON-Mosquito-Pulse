@@ -12,3 +12,10 @@
 _*.R
 _adv_check*.R
 _verify_*.R
+
+# local secrets (.env.example is the committed template)
+.env
+*.env
+!.env.example
+.Renviron
+.Renviron.*
