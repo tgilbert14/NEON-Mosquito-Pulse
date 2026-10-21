@@ -3104,10 +3104,10 @@
   },
   "files": {
     "data-sample/demo.rds": {
-      "checksum": "8519afa0a4ccef0c7de2f5fde76cb1bf"
+      "checksum": "fe834403ef133476dd3708c96f4cba1b"
     },
     "data/cross_site.rds": {
-      "checksum": "8aa736e631d88cccbff0f02a0afef329"
+      "checksum": "1e76140033d4fd06cbf228b0723c854e"
     },
     "data/env/ABBY.rds": {
       "checksum": "7ab41721cc285cd950c65775f7c43658"
@@ -3248,169 +3248,169 @@
       "checksum": "09eaf8b677d24ddcc48b6fa0e23e6040"
     },
     "data/search_index.rds": {
-      "checksum": "ab2ce65c10ec4adcdafa314c3a26f0eb"
+      "checksum": "61f0a57dbfbdfd962a2db3141790fb45"
     },
     "data/site_climate.rds": {
       "checksum": "679a534ef08be5711c967dc4e566ded6"
     },
     "data/site_index.rds": {
-      "checksum": "328d174926b25a50570e204230fb24d7"
+      "checksum": "40c1c73e4274fa7a22dda06effbff008"
     },
     "data/site_month_clim.rds": {
       "checksum": "f840eb8a0bf9d92261a77a18d329e9f5"
     },
     "data/sites/ABBY.rds": {
-      "checksum": "df824898765fe245eb8008313b8782eb"
+      "checksum": "512dfb7470a9ddbb8b86c129070ed9ec"
     },
     "data/sites/BARR.rds": {
-      "checksum": "76af26e868ea1494140c205cd0c2aaba"
+      "checksum": "190b84e90cd70d2baf3f441a8409b179"
     },
     "data/sites/BART.rds": {
-      "checksum": "0a2af850ab2e0fff8cef8cce578f72a5"
+      "checksum": "b6459491a10364bcc4eac62e3f31552a"
     },
     "data/sites/BLAN.rds": {
-      "checksum": "609ad442bbd1a4a6970adeef455fd201"
+      "checksum": "cd5e3f8ad85a46967863df047285028a"
     },
     "data/sites/BONA.rds": {
-      "checksum": "9412eda7a6b155aeb7b3f6d06a01b3a9"
+      "checksum": "4b3d0d74fd8ee2ee0a8298a7a7c099b9"
     },
     "data/sites/CLBJ.rds": {
-      "checksum": "e469e67b246f75c98ff0f60a89778bc4"
+      "checksum": "79e37bfd1c5d3a6e7b737f85a3a5127e"
     },
     "data/sites/CPER.rds": {
-      "checksum": "913be326361ed9e5cb710dbc463644e0"
+      "checksum": "57672b1cb2ddc3970c1696ff55aacf95"
     },
     "data/sites/DCFS.rds": {
-      "checksum": "1cdcbb6335dfaaf0003dc4fb46129a41"
+      "checksum": "6883024ab7dab1fb55e0c937885afaa3"
     },
     "data/sites/DEJU.rds": {
-      "checksum": "a5fd91b2e76b94303acdfc7d8362a853"
+      "checksum": "37366ab3c85191c5b381d40252f97b6c"
     },
     "data/sites/DELA.rds": {
-      "checksum": "cf0a199bc89d986f71d923eabd02de08"
+      "checksum": "f7beda864b83a829344dc489ad791ce6"
     },
     "data/sites/DSNY.rds": {
-      "checksum": "08a89fb19998e722635520a0ece744b1"
+      "checksum": "62b8b02a8457337e738aaaf8a612ec81"
     },
     "data/sites/GRSM.rds": {
-      "checksum": "6cd86f56b06c3924fc32e1489b348bc7"
+      "checksum": "087ebb7c4394d4edbd92d65a0c5f38e4"
     },
     "data/sites/GUAN.rds": {
-      "checksum": "c52a13acc37008a47494ebcbbfd83338"
+      "checksum": "b6edcc02fd143da7fa8e09a12e911509"
     },
     "data/sites/HARV.rds": {
-      "checksum": "d87f62afa10b4960ddaae2e64a4bd1db"
+      "checksum": "94cdf848984e12364b4cd76164ec524b"
     },
     "data/sites/HEAL.rds": {
-      "checksum": "f8e8d5ed6772e33aae971e4932ebda14"
+      "checksum": "fbd94e819855d0b125f41dcf3d66d715"
     },
     "data/sites/JERC.rds": {
-      "checksum": "e08c06c0ff26e99b0610fe2d646e30e3"
+      "checksum": "59011591d76e06a2ed23d1cefe011d71"
     },
     "data/sites/JORN.rds": {
-      "checksum": "b0442a4b8840a76047ca67cbeb4d8e4c"
+      "checksum": "3acac0aaee19b99e56fc17d136385ebd"
     },
     "data/sites/KONA.rds": {
-      "checksum": "3111e6c0cc0392bd0396a48a3f818c6e"
+      "checksum": "2bccea055391dd40eac76e889402fb36"
     },
     "data/sites/KONZ.rds": {
-      "checksum": "517c6b84d8b3310b641be0fcbaecef62"
+      "checksum": "7718c71a8cfa7264c36dd5be3a920b42"
     },
     "data/sites/LAJA.rds": {
-      "checksum": "ee5469ac391609ba2b6ad46829f3a93e"
+      "checksum": "d14efacfbf0f8123806eeb0afbf12244"
     },
     "data/sites/LENO.rds": {
-      "checksum": "94b59081712543d51d949eee6c2f9e42"
+      "checksum": "c3b89d5b180d4b27ed518af5529f08c5"
     },
     "data/sites/MLBS.rds": {
-      "checksum": "aac5f4b60ec2bde3bf8cc21eca01ad34"
+      "checksum": "7e448a18cae0c3e59b248c3b78ba65ac"
     },
     "data/sites/MOAB.rds": {
-      "checksum": "32d0153542f21e8d9ed85c47207275b9"
+      "checksum": "0988ec32344b484519f6b4f10b18d5ba"
     },
     "data/sites/NIWO.rds": {
-      "checksum": "8effa2bdbaeef40826a8b0f2896febce"
+      "checksum": "6f9a7d3212917196688fff6544ef454d"
     },
     "data/sites/NOGP.rds": {
-      "checksum": "198bfb68ce1a40e51a71afac776b2547"
+      "checksum": "7a030be77b89e1f8ea5a0ce138f378b0"
     },
     "data/sites/OAES.rds": {
-      "checksum": "6ceb37bb7444dd4e9dc32e652c8ece89"
+      "checksum": "0b36741488341dcd659040bde4674294"
     },
     "data/sites/ONAQ.rds": {
-      "checksum": "c6648f84800115b58908da55953638a7"
+      "checksum": "fffdb3281d745443a82665dca636b387"
     },
     "data/sites/ORNL.rds": {
-      "checksum": "69bdfe0bf8893a8de9d17766c41894a5"
+      "checksum": "85adc91e3b4c065bfa5b3a45a4085a81"
     },
     "data/sites/OSBS.rds": {
-      "checksum": "89c8129609e3a12c9f688368ce5c5eb6"
+      "checksum": "992b676573f6f6d4345140ec3f708288"
     },
     "data/sites/PUUM.rds": {
-      "checksum": "ced42413064e95a05ec9c75f9093801f"
+      "checksum": "439c5bece4d779d0de29c581fcfb57be"
     },
     "data/sites/RMNP.rds": {
-      "checksum": "4626451d7e9464e67d0797f4d570e82c"
+      "checksum": "634cb91596c238ea6bbf5a158beec10e"
     },
     "data/sites/SCBI.rds": {
-      "checksum": "fab391048e2e761ab45803d3cf30b827"
+      "checksum": "edd0afbf9b33ee6de5d0833d47d06fa4"
     },
     "data/sites/SERC.rds": {
-      "checksum": "f8f1da729f0deef64920da76254891fe"
+      "checksum": "83456bc4adfae8a8ff75d575726b58f0"
     },
     "data/sites/SJER.rds": {
-      "checksum": "917311954a04d25e259c29f9ab75d148"
+      "checksum": "0d101dbd59b07ecb4701f68f6ab27592"
     },
     "data/sites/SOAP.rds": {
-      "checksum": "5d2b825a724cd3d2659396f783a92f38"
+      "checksum": "3edb60cf874e762c18e6a65eb1a38122"
     },
     "data/sites/SRER.rds": {
-      "checksum": "8519afa0a4ccef0c7de2f5fde76cb1bf"
+      "checksum": "fe834403ef133476dd3708c96f4cba1b"
     },
     "data/sites/STEI.rds": {
-      "checksum": "3a084f315b2949d7fa1b10f5f613645b"
+      "checksum": "e351895449ec96545a39fb3408393bec"
     },
     "data/sites/STER.rds": {
-      "checksum": "f39cf5200aac8762e85197b9fa1df9ad"
+      "checksum": "1cef32edd351ad6efb00c7f053e4967b"
     },
     "data/sites/TALL.rds": {
-      "checksum": "e63bb2aae7f0665b80cd39995eb111de"
+      "checksum": "7f1912d79690418243b47124eb00ecc0"
     },
     "data/sites/TEAK.rds": {
-      "checksum": "2eb38e39a544c231c91e86587446cf70"
+      "checksum": "c2d104b91ec5db67e2d91ca410b8308c"
     },
     "data/sites/TOOL.rds": {
-      "checksum": "7c2919763f656e6c50494f29ad81aea1"
+      "checksum": "499231da37fcf05d01e820e045505852"
     },
     "data/sites/TREE.rds": {
-      "checksum": "67e813ab583517bbd889b9684a439689"
+      "checksum": "b049cb213eeae5a06c306f03585d2c26"
     },
     "data/sites/UKFS.rds": {
-      "checksum": "7acc2e60bdc0d27833f558364b9ad722"
+      "checksum": "f4afb5d2992fbdc913462ad91b871403"
     },
     "data/sites/UNDE.rds": {
-      "checksum": "6d19f8496b0605029e985c057f65a4a7"
+      "checksum": "7d327ad1fbe4296ca8ecdd2b19419fd5"
     },
     "data/sites/WOOD.rds": {
-      "checksum": "3c184f94541eda613c500c0a24b40131"
+      "checksum": "a52c77572f529cfc38607de877ed3d2c"
     },
     "data/sites/WREF.rds": {
-      "checksum": "ee5405fa1d4efeaa85534373f9db077b"
+      "checksum": "6c68a9ca4f1534bd1fa2f0a6483b45e0"
     },
     "data/sites/YELL.rds": {
-      "checksum": "f8b208cfa37755048a320db2eb1d926f"
+      "checksum": "3fc9101c6d5e0463e839a21c0efa3792"
     },
     "data/source-receipt.csv": {
-      "checksum": "faa46da7e1b7d2a2b5f983b4c15713e2"
+      "checksum": "c44660d79c0c4f7f7610e2c810e397af"
     },
     "global.R": {
       "checksum": "db7dd408cba13734a8a943d97097dbd7"
     },
     "R/mos_bundle_contract.R": {
-      "checksum": "3f4c35d866cd37eacf471b4e5e6dbf94"
+      "checksum": "29b905cf62dfcd050b8e93a32066400e"
     },
     "R/mos_helpers.R": {
-      "checksum": "e58ae07f7928dc7baf052aa5d509eff4"
+      "checksum": "8f2c93309c9ea0f437070529660d1f3c"
     },
     "R/site_metadata.R": {
       "checksum": "bb6c747ea5efd834b310a2286567d7f3"

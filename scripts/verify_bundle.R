@@ -11,6 +11,25 @@ sites <- sub("[.]rds$", "", basename(files))
 if (!identical(sites, expected)) note(sprintf("site roster mismatch missing=[%s] extra=[%s]",
   paste(setdiff(expected, sites), collapse=","), paste(setdiff(sites, expected), collapse=",")))
 
+# samplingImpractical vocabulary, written out here on purpose rather than read
+# from R/mos_bundle_contract.R, so the validator does not grade the producer's
+# rule with that same rule. NEON User Guide vH Table 1: OK = sampling occurred.
+sampled_codes <- c("ok")
+impractical_codes <- c("location snow covered","location flooded","temperature low",
+                       "logistical","management","extreme weather","other")
+# Coverage lag gate (months) against NEON's availableMonths for the release.
+# Measured at the first rebuild: raw effort reaches the last available month at
+# all 47 sites and the last valid interval trails it by 0 to 2 months (winter
+# off-season records). A truncated fetch or a dropped code moves these by years.
+max_raw_lag <- 1L
+max_valid_lag <- as.integer(Sys.getenv("MOS_MAX_COVERAGE_LAG_MONTHS", "6"))
+month_index <- function(x) { x <- as.character(x); as.integer(substr(x,1,4))*12L + as.integer(substr(x,6,7)) }
+warnings_out <- character(0)
+warn <- function(x) warnings_out[[length(warnings_out)+1L]] <<- x
+receipt <- tryCatch(utils::read.csv("data/source-receipt.csv", stringsAsFactors=FALSE), error=function(e)e)
+coverage <- if (!inherits(receipt,"error") && all(c("site","available_last_month") %in% names(receipt)))
+  setNames(as.character(receipt$available_last_month), receipt$site) else character(0)
+
 totals <- c(rows=0, effort=0, valid=0, zero=0, catch=0, held=0)
 index_oracle <- list()
 for (file in files) {
@@ -53,6 +72,32 @@ for (file in files) {
       !identical(as.character(b$meta$doi),"10.48443/rmw1-me46") ||
       !identical(as.character(b$meta$release_generated),"2026-01-23") ||
       !identical(as.character(b$meta$schema_version),"mosquito-pulse-opportunity-v1")) note(paste(site,"wrong release identity"))
+  code <- if ("samplingImpractical" %in% names(er)) tolower(trimws(as.character(er$samplingImpractical))) else rep(NA_character_, nrow(er))
+  code[!is.na(code) & !nzchar(code)] <- NA_character_
+  unknown <- sort(unique(code[!is.na(code) & !(code %in% c(sampled_codes, impractical_codes))]))
+  if (length(unknown)) note(paste(site,"unknown samplingImpractical code(s):",paste(unknown,collapse=",")))
+  occurred <- is.na(code) | code %in% sampled_codes
+  if (any(occurred & er$effort_status == "not_sampled")) note(sprintf("%s %d interval(s) coded NA/OK (sampling occurred) are classed not_sampled",
+    site, sum(occurred & er$effort_status == "not_sampled")))
+  if (any(code %in% impractical_codes & er$effort_status != "not_sampled")) note(paste(site,"impractical interval classed as sampled"))
+  if (!identical(as.integer(sort(unique(b$meta$years))), as.integer(sort(unique(valid$year[is.finite(valid$year)])))))
+    note(paste(site,"meta years differ from the years with valid intervals"))
+  if (!(site %in% names(coverage)) || is.na(coverage[[site]]) || !grepl("^[0-9]{4}-[0-9]{2}$", coverage[[site]])) {
+    note(paste(site,"source receipt has no NEON availableMonths coverage"))
+  } else {
+    last_raw <- suppressWarnings(max(er$collectDate, na.rm=TRUE))
+    last_valid <- suppressWarnings(max(valid$collectDate, na.rm=TRUE))
+    raw_lag <- month_index(coverage[[site]]) - month_index(format(last_raw, "%Y-%m"))
+    valid_lag <- month_index(coverage[[site]]) - month_index(format(last_valid, "%Y-%m"))
+    if (!is.finite(raw_lag) || raw_lag > max_raw_lag) note(sprintf("%s raw effort ends %s but NEON lists data through %s",
+      site, format(last_raw, "%Y-%m"), coverage[[site]]))
+    if (!is.finite(valid_lag) || valid_lag > max_valid_lag) note(sprintf("%s valid intervals end %s, %s months before NEON's last available month %s",
+      site, format(last_valid, "%Y-%m"), valid_lag, coverage[[site]]))
+  }
+  held_effort <- sum(b$held_identifications$hold_reason %in% "held_invalid_effort")
+  ids <- nrow(ob) + nrow(b$held_identifications)
+  if (ids > 0 && held_effort / ids > 0.01) warn(sprintf("%s %.1f%% of identifications are held for invalid effort (%d of %d)",
+    site, 100 * held_effort / ids, held_effort, ids))
   if (!isTRUE(all.equal(as.numeric(b$meta$effort_days),sum(valid$effort_days)))) note(paste(site,"meta effort mismatch"))
   if (!identical(as.integer(b$meta$n_occ_attempted),as.integer(nrow(valid)))) note(paste(site,"meta opportunity mismatch"))
   if (!identical(as.integer(b$meta$n_zero_catch),as.integer(sum(valid$zero_catch)))) note(paste(site,"meta zero mismatch"))
@@ -83,8 +128,8 @@ search <- tryCatch(readRDS("data/search_index.rds"), error=function(e)e)
 if (inherits(search,"error") || !is.list(search) || !is.data.frame(search$sites) ||
     !identical(sort(as.character(search$sites$site)),expected) ||
     !identical(as.character(search$release %||% ""),"RELEASE-2026")) note("search_index roster or release mismatch")
-receipt <- tryCatch(utils::read.csv("data/source-receipt.csv", stringsAsFactors=FALSE), error=function(e)e)
-receipt_req <- c("product","release","doi","release_generated","site","trapping_rows","sorting_rows","identification_rows","raw_md5")
+receipt_req <- c("product","release","doi","release_generated","site","trapping_rows","sorting_rows","identification_rows","raw_md5",
+                 "available_first_month","available_last_month","available_month_count")
 receipt_ok <- !inherits(receipt,"error") && is.data.frame(receipt) && !length(setdiff(receipt_req,names(receipt)))
 if (receipt_ok) receipt_ok <- identical(sort(as.character(receipt$site)),expected) &&
   all(!is.na(receipt$release) & receipt$release == "RELEASE-2026") &&
@@ -122,6 +167,7 @@ if (inherits(manifest,"error")) note("manifest unreadable") else {
 }
 cat(sprintf("bundles: %d files, %d rows, %d valid opportunities, %d supported zeros, %d catch rows, %d held rows\n",
             length(files),totals[["rows"]],totals[["valid"]],totals[["zero"]],totals[["catch"]],totals[["held"]]))
+for (w in unique(warnings_out)) cat(sprintf("::warning title=Mosquito verification::%s\n",w))
 if (length(problems)) {
   for (problem in unique(problems)) cat(sprintf("::error title=Mosquito verification::%s\n",problem))
   stop(sprintf("Mosquito verification FAILED with %d problem(s)",length(unique(problems))),call.=FALSE)
