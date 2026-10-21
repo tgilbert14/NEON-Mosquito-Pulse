@@ -60,7 +60,7 @@ Audit other sampling apps for a binary catch/absence model that lacks pending/he
 
 ## Production disposition · 2026-07-26
 
-**ADOPT** — The outcome-state reconciliation and restricted producer/validator/publisher pattern are production-proven at 47 sites. The exact release contains 55,114 valid opportunities, including 25,076 supported zeros; unavailable, held, and ineligible states never enter that zero claim.
+**ADOPT** — The outcome-state reconciliation and restricted producer/validator/publisher pattern are production-proven at 47 sites. The exact release contains 99,456 valid opportunities, including 46,341 supported zeros (corrected 2026-10-20; the 2026-07-26 build reported 55,114 and 25,076 because samplingImpractical `OK` was read as not sampled); unavailable, held, and ineligible states never enter that zero claim.
 
 **CONTEXT** — Semantic HTTP markers prove that the intended shell is reachable, not that hidden reactive outputs render. Add one real-bundle `shiny::testServer()` render to every Shiny app's exact-head gate, and browser-check an initially hidden output both before and after it becomes visible. This release caught and fixed that distinction in PR #4.
 
@@ -135,3 +135,7 @@ The opportunity/outcome-state and restricted-publisher contracts remain
 DRIVER BYTE CHANGE**. No release source, bundle, effort, zero, expansion,
 estimator, join, support, adapter, vote, or Driver artifact changes in this
 presentation-only refinement.
+
+## samplingImpractical OK correction · 2026-10-20
+
+**CORRECTION / DRIVER BYTE CHANGE** — `mos_sampling_occurred()` had no `ok` token, so every interval NEON marks `OK` (User Guide vH Table 1: sampling occurred) was classed not sampled. The 2026-07-26 counts above dropped 44,342 intervals, held 81,093 identifications for invalid effort, and stopped every site at 2019 or 2020. PR #14 (merge `a9ba89b`) replaced the rule with an explicit code map that stops on unknown codes and added a per-site coverage-lag gate against NEON `availableMonths`. The rebuilt RELEASE-2026 bundles (refresh run `39186286496`, data commit `f5e192b`) contain 99,456 valid opportunities, 46,341 supported zeros, 183,419 catch rows, 3,343 held rows (1 for invalid effort), and 420 site-years running to 2024 at all 47 sites. A Driver consumer rebuilding against these bundles moves from about 200 to about 420 mosquito site-years.
