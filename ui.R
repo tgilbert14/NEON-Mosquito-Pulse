@@ -67,7 +67,7 @@ ui <- bslib::page_fillable(
         tags$a(class = "lp-driver", href = "https://tgilbert14.github.io/NEON-Driver-Cascade/",
           "Return to the Response Atlas", tags$span(`aria-hidden` = "true", "↗"))),
       div(class = "lp-copy",
-        p(class = "lp-eyebrow", "Mosquitoes · CO₂ traps · release 2026"),
+        p(class = "lp-eyebrow", sprintf("Mosquitoes · CO₂ traps · release %s", sub("^RELEASE-", "", MOS_RELEASE$release))),
         h1(id = "livingPosterTitle", span("What rises"), tags$em("after rain?")),
         p(class = "lp-promise", "Follow mosquito activity through rainfall, warmth, and each sampled season."),
         tags$a(class = "lp-cta", href = "#site-picker", "Choose a field site", tags$span(`aria-hidden` = "true", "→"))),

@@ -24,6 +24,16 @@ server <- function(input, output, session) {
   rv <- reactiveValues(obs=NULL, effort=NULL, traps=NULL, board=NULL, tn=0, nocc=0, effw=NULL, label=NULL, site=NULL, sp=NULL, ctx=NULL, is_demo=FALSE, grid=NULL,
                        meta=NULL, held=NULL, pendingSite=NULL)
 
+  # "One collection (sample, date, taxon) is N% of this catch; ..." with any
+  # missing part left out.
+  top_record_note <- function(sv) {
+    parts <- c(sv$top_sample, if (!is.na(sv$top_date)) format(sv$top_date, "%d %b %Y") else NA_character_, sv$top_taxon)
+    parts <- parts[!is.na(parts) & nzchar(parts)]
+    sprintf("One collection%s is %d%% of this catch; without it the index is %s.",
+            if (length(parts)) paste0(" (", paste(parts, collapse = ", "), ")") else "",
+            as.integer(sv$top_share), format(sv$index_excl_top, nsmall = 2))
+  }
+
   observe({ ch <- mos_state_choices(); updateSelectInput(session, "stateSel", choices = ch, selected = if ("AZ" %in% ch) "AZ" else NULL) })
   observeEvent(input$stateSel, {
     sites <- mos_sites_in_state(input$stateSel)
@@ -44,7 +54,7 @@ server <- function(input, output, session) {
   ingest <- function(b, label, is_demo = FALSE) {
     if (is.null(b) || is.null(b$effort) || !any(b$effort$valid_effort %in% TRUE)) {
       session$sendCustomMessage("loadDone", list())   # dismiss the overlay immediately; never wait on the 90s timer
-      showNotification(HTML("No validated mosquito release is bundled. Run the reviewed RELEASE-2026 refresh workflow before deployment."),
+      showNotification(HTML("No validated mosquito release is bundled. Run the reviewed refresh workflow before deployment."),
                        type = "error", duration = 12)
       return(invisible())
     }
@@ -98,7 +108,8 @@ server <- function(input, output, session) {
       if (!is.null(bio)) p(bio),
       p(sprintf("%s · %s species caught · %s mosquitoes per 24 trap-hours", row$state[1], row$taxa[1] %||% "n/a", if (is.finite(row$mos_per_24h[1] %||% NA)) format(round(row$mos_per_24h[1], 2), nsmall = 2) else "n/a")),
       footer = tagList(modalButton("Close"),
-        actionButton("siteInfoLoad", tagList(bs_icon("arrow-right-circle"), " Explore this site"), class = "btn-primary"))))
+        actionButton("siteInfoLoad", tagList(bs_icon("arrow-right-circle"), " Explore this site"), class = "btn-primary",
+          onclick = sprintf("smtLoadStart(%s)", js_str(paste0(row$name[1], " · loading…")))))))
     rv$infoSite <- code
   })
   observeEvent(input$siteInfoLoad, { removeModal(); load_site(rv$infoSite) })
@@ -218,9 +229,7 @@ server <- function(input, output, session) {
     valid_days <- m$valid_effort_days %||% sv$effort_days
     unavail_n <- m$n_unavailable_outcome %||% 0L
     dom_note <- if (is.finite(sv$top_share %||% NA) && sv$top_share >= 25)
-      p(class = "hero-note", sprintf("One collection (%s, %s, %s) is %d%% of this catch; without it the index is %s.",
-        sv$top_sample %||% "one sample", format(sv$top_date, "%d %b %Y"), sv$top_taxon %||% "mosquitoes",
-        as.integer(sv$top_share), format(sv$index_excl_top, nsmall = 2)))
+      p(class = "hero-note", top_record_note(sv))
     div(class="hero-band",
       div(class="hero-title", bs_icon("broadcast"), tags$h1(class = "hero-site", rv$label),
         actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " change site"), class = "hero-change"),
@@ -284,7 +293,7 @@ server <- function(input, output, session) {
       sprintf("Over <b>%s</b>, NEON recorded about <b>%s</b> 24-hour units of trap effort with a known catch here and an estimated <b>%s</b> mosquitoes from <b>%d</b> identified species.",
         yr_lab, fmt_int(rv$tn), fmt_int(sum(brd$total)), nrow(brd)),
       sprintf("The most-active mosquito is <b><i>%s</i></b>, about <b>%.2f</b> per 24 trap-hours; the most <i>widespread</i> is <b><i>%s</i></b>, on <b>%.0f%%</b> of sampled intervals.",
-        top$scientificName, top$index, ubi$scientificName, ubi$ubiquity))
+        htmltools::htmlEscape(top$scientificName), top$index, htmltools::htmlEscape(ubi$scientificName), ubi$ubiquity))
     if (length(culex) && !is.na(culex) && culex > 0)
       pts <- c(pts, sprintf("<b>Culex</b> makes up about <b>%.0f%%</b> of the catch here. Some species in this genus are important vectors, but this catch product does not test for a pathogen or measure health risk.", culex))
     if (!is.null(ch)) {
@@ -328,7 +337,7 @@ server <- function(input, output, session) {
     femp <- if (f + m > 0) round(100 * f / (f + m)) else NA_real_           # of SEXED — same denominator as the hero badge
     pct_u <- round(100 * u / max(1, f + m + u))
     insight_banner("pie-chart", tone="terra", HTML(sprintf("The catch is <b>%.0f%%</b> %s, and <span class='ci-hero'>%s%% of the sexed mosquitoes are female</span>%s. Female-heavy is the CO2 trap doing its job, not a population sex ratio.",
-      gs$share[1], gs$genus[1], ifelse(is.na(femp), "n/a", as.character(femp)),
+      gs$share[1], htmltools::htmlEscape(gs$genus[1]), ifelse(is.na(femp), "n/a", as.character(femp)),
       if (pct_u >= 20) sprintf(" (%d%% of the catch was left unsexed)", pct_u) else "")))
   })
 
@@ -393,8 +402,8 @@ server <- function(input, output, session) {
     pkk <- pulse_peak(pk, rv$obs)
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     reg <- precip_regime(cl); desert <- identical(biome_of(rv$site), "desert")
-    head_txt <- if (isTRUE(pkk$years_total == 1)) sprintf("Activity peaked around <b>week %d (%s)</b> in the one season trapped here. ", pkk$week, pkk$month_label)
-      else sprintf("Activity peaks around <b>week %d (%s)</b>, a week trapped in %d of the %d years. ", pkk$week, pkk$month_label, pkk$n_years, pkk$years_total)
+    head_txt <- sprintf("Activity %s around <b>week %d (%s)</b>, %s. ", if (isTRUE(pkk$years_total == 1)) "peaked" else "peaks",
+      pkk$week, pkk$month_label, peak_support_text(pkk))
     yrs <- rv$meta$years %||% integer(0)
     era_txt <- paste0(
       if (length(yrs) && min(yrs) < 2018 && max(yrs) >= 2018) " Two trapping designs are pooled here: from 2018 each bout has one night instead of two." else "",
@@ -455,7 +464,9 @@ server <- function(input, output, session) {
     if (is.null(ch)) return(insight_banner("circle", tone="gold",
       "Species-richness extrapolation is unavailable because no eligible species incidence was observed."))
     cov <- site_coverage(rv$obs, rv$nocc)
-    ci_txt <- if (is.finite(ch$ci_lo) && is.finite(ch$ci_hi)) sprintf("%.0f to %.0f species", ch$ci_lo, ch$ci_hi) else "wide"
+    ci_txt <- if (is.finite(ch$ci_lo) && is.finite(ch$ci_hi)) {
+      if (round(ch$ci_lo) == round(ch$ci_hi)) sprintf("%.0f species", ch$ci_lo) else sprintf("%.0f to %.0f species", ch$ci_lo, ch$ci_hi)
+    } else "wide"
     chao_pop <- info_pop("Chao2 estimate",
       p(tags$b("Chao2"), " estimates ", tags$b(sprintf("%.0f", ch$chao2)), " species use the site (95% CI ", tags$b(ci_txt), "; Chao 1987), so roughly ", tags$b(sprintf("%.0f", max(0, round(ch$chao2 - ch$S_obs)))), " remain uncaught."),
       if (ch$unstable) p(class="pop-caveat", bsicons::bs_icon("exclamation-triangle"),
@@ -787,9 +798,7 @@ server <- function(input, output, session) {
       req(!is.null(rv$obs))
       sv <- site_vectors(rv$obs, rv$nocc, rv$tn, rv$effw, if (!is.null(rv$traps)) nrow(rv$traps) else NA)
       pk <- pulse_peak(pulse_phenology(rv$obs, rv$effw), rv$obs)
-      note <- if (is.finite(sv$top_share %||% NA) && sv$top_share >= 25)
-        sprintf("One collection (%s, %s) is %d%% of this catch; without it the index is %s.",
-                sv$top_sample, format(sv$top_date, "%d %b %Y"), as.integer(sv$top_share), format(sv$index_excl_top, nsmall = 2)) else NULL
+      note <- if (is.finite(sv$top_share %||% NA) && sv$top_share >= 25) top_record_note(sv) else NULL
       build_mos_report_pdf(file, rv$label %||% rv$site, sv, rv$board, pk, rv$meta %||% list(),
                            coarse_share = sv$coarse_share, top_note = note)
     },
@@ -821,8 +830,8 @@ server <- function(input, output, session) {
         m("collections", if (!is.null(sv)) sv$n_collections else NA, "sampled day/night intervals with a known catch"),
         m("intervals_catch_unknown", mt$n_unavailable_outcome %||% NA, "sampled intervals whose catch is pending, held or unknown; left out of rates"),
         m("most_active_species", if (!is.null(sv)) sv$top else NA, ""),
-        m("peak_activity_week", pkk$week, "week of the year (Sunday start, R %U) of peak median activity, among weeks trapped in at least half the years"),
-        m("peak_activity_week_n_years", pkk$n_years, sprintf("years with trapping in the peak week, of %s years", pkk$years_total %||% NA)),
+        m("peak_activity_week", pkk$week, "week of the year (Sunday start, R %U) of peak median activity, among weeks trapped in at least half as many years as the best-covered week (3 or more where possible)"),
+        m("peak_activity_week_n_years", pkk$n_years, sprintf("years the peak week was trapped, of %s years with trapping at the site", pkk$years_total %||% NA)),
         m("release", mt$release %||% MOS_RELEASE$release, paste0("NEON ", MOS_RELEASE$product, ", doi:", MOS_RELEASE$doi, ", CC BY 4.0")),
         m("data_through", mt$data_through %||% NA, "last sampled collection date in the bundle"),
         m("top_genus", if (!is.null(gs) && nrow(gs)) sprintf("%s (%.0f%%)", gs$genus[1], gs$share[1]) else NA, ""),
@@ -857,7 +866,7 @@ server <- function(input, output, session) {
         p("Every column in the CSV downloads, with units and how it was computed."),
         downloadButton("codebookCsvAbout", tagList(bs_icon("book"), " Column codebook (CSV)"), class = "smt-clear-btn")),
       div(class="about-card", h4(bs_icon("diagram-3"), " The NEON explorer suite"),
-        p("Ten apps on NEON data, one per product, plus the ", tags$a(href = ATLAS_COVER_URL, "NEON Cross-Product Response Atlas"), " that lines them up."),
+        p(sprintf("%d apps on NEON data, one per product, plus the ", sum(SUITE_APPS$key != "atlas")), tags$a(href = ATLAS_COVER_URL, "NEON Cross-Product Response Atlas"), " that lines them up."),
         tags$ul(class = "suite-list", lapply(seq_len(nrow(SUITE_APPS)), function(i) {
           a <- SUITE_APPS[i, ]
           tags$li(if (a$key == "mosquito") tags$b(a$name, " (this app)") else tags$a(href = a$app_url, a$name),

@@ -160,6 +160,18 @@ expect(identical(pp$week, 21L) && identical(pp$n_years, 4L) && identical(pp$year
        "the peak week needs at least half the trapped years behind it")
 expect(identical(pulse_peak(data.frame(week = 30L, index = 2, q25 = 2, q75 = 2, n_years = 1L))$years_total, 1L),
        "a one-season site still gets a peak, flagged as one season")
+pk10 <- data.frame(week = 30:32, index = c(8, 3, 2), q25 = 0, q75 = 0, n_years = c(2L, 5L, 5L))
+attr(pk10, "years_trapped") <- 10L
+pp10 <- pulse_peak(pk10)
+expect(identical(pp10$week, 31L) && identical(pp10$years_total, 10L),
+       "the support denominator is the years the site was trapped, not the best week's count")
+expect(identical(peak_support_text(pp10), "the median of the 5 years that week was trapped (of 10 years with trapping)"),
+       "the peak sentence names the week's years and the site's years")
+pk2 <- data.frame(week = 30:31, index = c(8, 3), q25 = 0, q75 = 0, n_years = c(2L, 1L))
+expect(identical(pulse_peak(pk2)$n_years, 2L) && grepl("average of the 2 years", peak_support_text(pulse_peak(pk2))),
+       "a peak resting on two years says so instead of calling it a median")
+expect(!chao2_collections(tibble::tibble(scientificName = c("a", "b", "b", "c", "c"), occ_id = as.character(1:5),
+  is_target = TRUE, is_species = TRUE), n_occ = 10)$unstable, "Chao2 with one singleton has nothing to extrapolate, so it is not flagged volatile")
 bp <- pulse_phenology(bundle$obs, bundle$effort_week)
 expect(all(bp$q25 <= bp$index & bp$index <= bp$q75) && all(bp$q25 >= 0), "the pulse band is the 25th to 75th percentile and never below zero")
 cy <- catch_by_year(bundle$obs, "Aedes albopictus", bundle$effort_week, bundle$effort)

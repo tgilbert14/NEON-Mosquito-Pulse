@@ -11,7 +11,7 @@ expected=$(md5sum manifest.json | cut -d' ' -f1)
 # htmltools writes void tags as <meta ... content="x"/>; accept that and the plain ">" form.
 revision_tag="<meta name=\"neon-app-revision\" content=\"${expected}\" ?/?>"
 echo "Expecting Connect revision $expected (md5 of manifest.json)."
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 90); do
   pages_body=$(curl --fail --silent --show-error --location --max-time 30 "$pages" || true)
   app_body=$(curl --fail --silent --show-error --location --max-time 60 "$app" || true)
   missing=()
@@ -23,8 +23,8 @@ for attempt in $(seq 1 30); do
     echo "OK: Pages poster is live and Connect serves revision $expected with its title and lang=\"en\"."
     exit 0
   fi
-  printf 'Attempt %s/30: still missing: %s\n' "$attempt" "$(printf '%s; ' "${missing[@]}")"
+  printf 'Attempt %s/90: still missing: %s\n' "$attempt" "$(printf '%s; ' "${missing[@]}")"
   sleep 30
 done
-echo "::error title=Production revision not live::After 15 minutes, still missing: $(printf '%s; ' "${missing[@]}")expected Connect revision $expected from manifest.json."
+echo "::error title=Production revision not live::After 45 minutes, still missing: $(printf '%s; ' "${missing[@]}")expected Connect revision $expected from manifest.json."
 exit 1

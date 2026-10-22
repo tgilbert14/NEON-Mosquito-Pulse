@@ -46,7 +46,7 @@ Rscript --vanilla scripts/verify_bundle.R
 node scripts/check_cover.mjs
 ```
 
-The refresh workflow builds all 47 sites in empty staging, validates the exact candidate, pushes it to `automation/mosquito-release-2026` and stops. It opens one `data-refresh` issue with the compare link; a person opens the PR to `master`, waits for green checks on that exact head, and merges it. The workflow never pushes to `master` and never opens a PR.
+The refresh workflow builds all 47 sites in empty staging, validates the exact candidate, pushes it to `automation/mosquito-release-2026` and stops. When the candidate changes data it opens or updates one `data-refresh` issue with a rows and data-through summary and the compare link; a person opens the PR to `master`, waits for green checks on that exact head, and merges it. The workflow never pushes to `master` and never opens a PR.
 
 ## Data and art provenance
 

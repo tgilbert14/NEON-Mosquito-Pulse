@@ -126,31 +126,42 @@ pulse_phenology <- function(obs, effort_week = NULL, era = NULL) {
   # Across years per week: the MEDIAN, not the mean. Mosquito catch is wildly
   # skewed and outlier-prone (one fluke year can be 1000x a normal week), so a
   # mean lets a single freak January collection masquerade as the seasonal peak.
-  # The median gives the typical year's pulse (standard in mosquito surveillance);
-  # the band is the inter-quartile spread, so noisy weeks read as noisy.
+  # The median gives the typical year's pulse (standard in mosquito surveillance).
   # The band is the 25th to 75th percentile across years, so it never dips
   # below zero and it is the "middle 50% of years" the chart says it is.
   if (!is.null(era)) yw <- yw[yw$year %in% era, , drop = FALSE]
   if (!nrow(yw)) return(NULL)
-  yw %>% dplyr::group_by(.data$week) %>%
+  out <- yw %>% dplyr::group_by(.data$week) %>%
     dplyr::summarise(index = stats::median(.data$idx),
                      q25 = stats::quantile(.data$idx, 0.25, names = FALSE),
                      q75 = stats::quantile(.data$idx, 0.75, names = FALSE),
                      n_years = dplyr::n(), .groups = "drop") %>%
     dplyr::arrange(.data$week)
+  # Years with any trapping at the site. NEON bouts are biweekly, so a single
+  # week of the year is trapped in only about half of them.
+  attr(out, "years_trapped") <- dplyr::n_distinct(yw$year)
+  out
 }
 
 # The seasonal peak, gated on how many years support each week: a week trapped
 # in one year keeps its raw single-year value while multi-year weeks are pulled
-# to the median, so an ungated which.max lets one spike win. Require at least
-# half the trapped years (minimum 2) before a week can be the peak.
+# to the median, so an ungated which.max lets one spike win. A week must be
+# trapped in at least half as many years as the best-supported week, and in at
+# least 3 years where any week has 3, so the median is a real median. If no
+# week clears the bar the bar drops one year at a time, and the result always
+# reports the support the chosen week has (n_years) and the years the site
+# was trapped at all (years_total).
 pulse_peak <- function(pk, obs = NULL) {
   none <- list(week = NA_integer_, n_years = NA_integer_, years_total = NA_integer_, month_label = NA_character_)
   if (is.null(pk) || !nrow(pk) || !any(pk$index > 0, na.rm = TRUE)) return(none)
-  Y <- max(pk$n_years)
-  need <- if (Y >= 2) max(2L, ceiling(Y / 2)) else 1L
-  ok <- pk[pk$n_years >= need & pk$index > 0, , drop = FALSE]
-  if (!nrow(ok)) ok <- pk[pk$index > 0, , drop = FALSE]
+  best <- max(pk$n_years)
+  Y <- as.integer(attr(pk, "years_trapped") %||% best)
+  need <- if (best >= 3) max(3L, as.integer(ceiling(best / 2))) else as.integer(best)
+  ok <- pk[0, , drop = FALSE]
+  while (!nrow(ok) && need >= 1L) {
+    ok <- pk[pk$n_years >= need & pk$index > 0, , drop = FALSE]
+    need <- need - 1L
+  }
   i <- which.max(ok$index); w <- ok$week[i]
   month <- NA_character_
   if (!is.null(obs) && nrow(obs) && all(c("week", "collectDate") %in% names(obs))) {
@@ -158,7 +169,19 @@ pulse_peak <- function(pk, obs = NULL) {
     if (length(d) && any(!is.na(d))) month <- month.name[as.integer(format(stats::median(d, na.rm = TRUE), "%m"))]
   }
   if (is.na(month)) month <- month.name[as.integer(format(as.Date("2021-01-03") + 7 * max(0L, w), "%m"))]
-  list(week = as.integer(w), n_years = as.integer(ok$n_years[i]), years_total = as.integer(Y), month_label = month)
+  list(week = as.integer(w), n_years = as.integer(ok$n_years[i]), years_total = Y, month_label = month)
+}
+
+# Plain-text clause naming what the peak week rests on, shared by the Pulse
+# headline, the report PDF and the summary CSV.
+peak_support_text <- function(peak) {
+  ny <- suppressWarnings(as.integer(peak$n_years %||% NA)); yt <- suppressWarnings(as.integer(peak$years_total %||% NA))
+  if (is.na(ny)) return("")
+  if (isTRUE(yt == 1L)) return("in the one season trapped here")
+  base <- if (ny >= 3L) sprintf("the median of the %d years that week was trapped", ny)
+    else if (ny == 2L) "the average of the 2 years that week was trapped"
+    else "from the one year that week was trapped"
+  if (!is.na(yt)) sprintf("%s (of %d years with trapping)", base, yt) else base
 }
 
 # genus composition (shares of whole-trap catch)
@@ -205,7 +228,9 @@ chao2_collections <- function(obs, n_occ = NULL) {
   var_f0 <- max(var_f0, 0); ci_lo <- ci_hi <- NA_real_
   if (f0 > 0 && var_f0 > 0) { K <- exp(1.96 * sqrt(log(1 + var_f0 / f0^2))); ci_lo <- S + f0 / K; ci_hi <- S + f0 * K }
   else if (f0 == 0) { ci_lo <- ci_hi <- S }
-  list(S_obs = S, chao2 = round(chao, 1), m = m, Q1 = Q1, Q2 = Q2, unstable = Q2 < 3,
+  # Volatile only when there are uncaught species to estimate: with Q1 <= 1 the
+  # bias-corrected f0 is 0 and the estimate is simply S.
+  list(S_obs = S, chao2 = round(chao, 1), m = m, Q1 = Q1, Q2 = Q2, unstable = Q2 < 3 && Q1 > 1,
        ci_lo = round(ci_lo, 1), ci_hi = round(ci_hi, 1))
 }
 # species accumulation over collection occasions (deterministic permutation mean).

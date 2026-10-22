@@ -150,10 +150,15 @@ jobs:
             "$newest" "$pinned" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")
           gh label create neon-release --force --color 1D76DB --description "NEON published a release newer than the pinned one" \
             || echo "::warning::Could not create the neon-release label."
-          issue_number=$(gh issue list --label neon-release --state open --json number --jq '.[0].number // empty') || issue_number=""
-          if [ -n "$issue_number" ]; then
-            gh issue edit "$issue_number" --title "$title" || echo "::warning::Could not retitle issue $issue_number."
-            gh issue comment "$issue_number" --body "$issue_body" || echo "::warning::Could not comment on issue $issue_number."
+          open_issue=$(gh issue list --label neon-release --state open --json number,title --jq '.[0] // empty | [.number, .title] | @tsv') || open_issue=""
+          if [ -n "$open_issue" ]; then
+            IFS=$'\t' read -r issue_number issue_title <<< "$open_issue"
+            if [ "$issue_title" = "$title" ]; then
+              echo "Release watch: issue #$issue_number already tracks $newest." >> "$GITHUB_STEP_SUMMARY"
+            else
+              gh issue edit "$issue_number" --title "$title" || echo "::warning::Could not retitle issue $issue_number."
+              gh issue comment "$issue_number" --body "$issue_body" || echo "::warning::Could not comment on issue $issue_number."
+            fi
           else
             gh issue create --title "$title" --label neon-release --body "$issue_body" || echo "::warning::Could not open the neon-release issue."
           fi
@@ -325,7 +330,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      issues: write
+    outputs:
+      notify: ${{ steps.publish.outputs.notify }}
+      title: ${{ steps.publish.outputs.title }}
+      summary: ${{ steps.publish.outputs.summary }}
+      head: ${{ steps.publish.outputs.head }}
     steps:
       - name: Checkout validated producer revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -345,6 +354,7 @@ jobs:
           name: mosquito-release-2026-${{ github.sha }}
           path: ${{ runner.temp }}/candidate
       - name: Publish review branch, never master
+        id: publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -359,8 +369,41 @@ jobs:
           git add -A -- data data-sample manifest.json
           if git diff --cached --quiet; then
             echo "No validated data change: candidate identical to master" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "notify=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          # Change summary from the source receipts: rows per site and data-through,
+          # master before and candidate after. A change that touches only the receipt
+          # and the manifest (checksums) is provenance only and opens no issue.
+          git show origin/master:data/source-receipt.csv > "$RUNNER_TEMP/receipt-before.csv" 2>/dev/null || : > "$RUNNER_TEMP/receipt-before.csv"
+          receipt_rows() {
+            awk -F, 'NR == 1 { for (i = 1; i <= NF; i++) { gsub(/"/, "", $i); h[$i] = i }; next }
+              { gsub(/"/, ""); print $h["site"], $h["trapping_rows"] + $h["sorting_rows"] + $h["identification_rows"] }' "$1" | sort
+          }
+          receipt_through() {
+            awk -F, 'NR == 1 { for (i = 1; i <= NF; i++) { gsub(/"/, "", $i); h[$i] = i }; next }
+              { gsub(/"/, ""); t = ("data_through" in h) ? $h["data_through"] : $h["available_last_month"]; if (t > mx) mx = t }
+              END { print (mx == "" ? "n/a" : mx) }' "$1"
+          }
+          receipt_rows "$RUNNER_TEMP/receipt-before.csv" > "$RUNNER_TEMP/rows-before.txt"
+          receipt_rows data/source-receipt.csv > "$RUNNER_TEMP/rows-after.txt"
+          rows_before=$(awk '{ s += $2 } END { print s + 0 }' "$RUNNER_TEMP/rows-before.txt")
+          rows_after=$(awk '{ s += $2 } END { print s + 0 }' "$RUNNER_TEMP/rows-after.txt")
+          sites_changed=$(join -a 1 -a 2 -e 0 -o 0,1.2,2.2 "$RUNNER_TEMP/rows-before.txt" "$RUNNER_TEMP/rows-after.txt" | awk '$2 != $3' | wc -l)
+          through_before=$(receipt_through "$RUNNER_TEMP/receipt-before.csv")
+          through_after=$(receipt_through data/source-receipt.csv)
+          rows_added=$(( rows_after - rows_before ))
+          non_provenance=$(git diff --cached --name-only | grep -cvE '^(data/source-receipt\.csv|manifest\.json)$' || true)
+          if [ "$sites_changed" -eq 0 ] && [ "$non_provenance" -eq 0 ]; then
+            notify=false
+            change_line="Provenance only, no data change (source receipt or manifest checksums)."
+          else
+            notify=true
+            change_line=$(printf 'Source rows %s to %s (%+d) at %s sites; data through %s to %s; %s bundle or index files changed.' \
+              "$rows_before" "$rows_after" "$rows_added" "$sites_changed" "$through_before" "$through_after" "$non_provenance")
+          fi
+          echo "$change_line" | tee -a "$GITHUB_STEP_SUMMARY"
           branch="automation/mosquito-release-2026"
           remote_head=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
           git switch -C "$branch"
@@ -389,23 +432,16 @@ jobs:
           fi
           echo "Published $published_commit to $branch" | tee -a "$GITHUB_STEP_SUMMARY"
 
-          # One open data-refresh issue tells a person a candidate is waiting.
+          # The notify job (issues: write) tells a person a candidate is waiting.
           # The workflow never opens or merges the PR; a person does both.
-          compare_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/master...${branch}?expand=1"
-          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          # shellcheck disable=SC2016 # the backticks are Markdown code spans, not command substitution
-          issue_body=$(printf 'Validated candidate `%s` is on `%s`.\n\n- Compare and open the PR: %s\n- Run: %s\n\nReview the diff, open the PR to master, wait for green checks on that exact head, then merge.\n' \
-            "$published_commit" "$branch" "$compare_url" "$run_url")
-          # The branch is already pushed; a failure here only loses the reminder, so it warns.
-          gh label create data-refresh --force --color 0E8A16 --description "A validated data refresh is waiting for review" \
-            || echo "::warning::Could not create the data-refresh label."
-          issue_number=$(gh issue list --label data-refresh --state open --json number --jq '.[0].number // empty') || issue_number=""
-          if [ -n "$issue_number" ]; then
-            gh issue comment "$issue_number" --body "$issue_body" || echo "::warning::Could not comment on issue $issue_number."
-          else
-            gh issue create --title "Mosquito refresh candidate waiting" --label data-refresh --body "$issue_body" \
-              || echo "::warning::Could not open the data-refresh issue."
-          fi
+          {
+            echo "notify=$notify"
+            echo "head=$published_commit"
+            echo "title=NEON refresh ready: Mosquito Pulse ${rows_added} rows, data through ${through_after}"
+            echo "summary<<MOS_SUMMARY_EOF"
+            echo "$change_line"
+            echo "MOS_SUMMARY_EOF"
+          } >> "$GITHUB_OUTPUT"
 
           pr_count=$(gh pr list --head "$branch" --base master --state open \
             --json url --jq 'length')
@@ -443,3 +479,41 @@ jobs:
           gh pr comment "$pr_url" \
             --body "Updated from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. GitHub will hold the pull_request synchronize checks triggered by this automation update for approval; a repository write user must select **Approve workflows to run**. Do not merge until checks are green on exact head ${published_commit}."
           echo "::notice title=Approve exact-head PR checks::Existing PR updated to $published_commit. A repository write user must select Approve workflows to run, then verify green checks on that exact head."
+
+  notify:
+    # One open data-refresh issue per repo: opened, or retitled and commented,
+    # when a published candidate changes data. A failure here turns the run red,
+    # which is itself the signal a person sees.
+    needs: publish_candidate
+    if: needs.publish_candidate.outputs.notify == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the data-refresh issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ needs.publish_candidate.outputs.title }}
+          SUMMARY: ${{ needs.publish_candidate.outputs.summary }}
+          HEAD_SHA: ${{ needs.publish_candidate.outputs.head }}
+        run: |
+          set -euo pipefail
+          branch="automation/mosquito-release-2026"
+          compare_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/master...${branch}?expand=1"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # shellcheck disable=SC2016 # the backticks are Markdown code spans, not command substitution
+          body=$(printf 'Validated candidate `%s` is on `%s`.\n\n%s\n\n- Compare and open the PR: %s\n- Run: %s\n\nReview the diff, open the PR to master, wait for green checks on that exact head, then merge.\n' \
+            "$HEAD_SHA" "$branch" "$SUMMARY" "$compare_url" "$run_url")
+          gh label create data-refresh --force --color 0E8A16 --description "A validated data refresh is waiting for review"
+          issue_number=$(gh issue list --label data-refresh --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue_number" ]; then
+            gh issue edit "$issue_number" --title "$TITLE"
+            gh issue comment "$issue_number" --body "$body"
+            echo "Updated data-refresh issue #$issue_number." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh issue create --title "$TITLE" --label data-refresh --body "$body"
+            echo "Opened a data-refresh issue." >> "$GITHUB_STEP_SUMMARY"
+          fi

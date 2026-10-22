@@ -79,6 +79,8 @@ for (site in sites) {
     available_first_month = available[[site]][1L],
     available_last_month = available[[site]][length(available[[site]])],
     available_month_count = length(available[[site]]),
+    data_through = { d <- substr(as.character(raw$mos_trapping$collectDate), 1L, 10L); d <- d[!is.na(d) & nzchar(d)]
+                     if (length(d)) max(d) else NA_character_ },
     stringsAsFactors = FALSE
   )
 }

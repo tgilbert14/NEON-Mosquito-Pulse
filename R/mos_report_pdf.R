@@ -53,9 +53,10 @@ build_mos_report_pdf <- function(file, label, sv, board, peak, meta,
   graphics::par(family = "", mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0), xpd = NA)
   graphics::plot.new(); graphics::plot.window(xlim = c(0, 100), ylim = c(0, 100), xaxs = "i", yaxs = "i")
 
-  product <- as.character(fld(meta, "product") %||% "DP1.10043.001")
-  release <- as.character(fld(meta, "release") %||% "RELEASE-2026")
-  doi <- as.character(fld(meta, "doi") %||% "10.48443/rmw1-me46")
+  pin <- if (exists("MOS_RELEASE")) MOS_RELEASE else list(product = "DP1.10043.001", release = "unknown release", doi = "")
+  product <- as.character(fld(meta, "product") %||% pin$product)
+  release <- as.character(fld(meta, "release") %||% pin$release)
+  doi <- as.character(fld(meta, "doi") %||% pin$doi)
   doi_url <- if (grepl("^https?://", doi)) doi else paste0("https://doi.org/", sub("^doi:", "", doi))
 
   # ---- header band ---------------------------------------------------------
@@ -82,7 +83,9 @@ build_mos_report_pdf <- function(file, label, sv, board, peak, meta,
     chip(1, if (is.finite(n_taxa)) format(n_taxa, big.mark = ",") else "n/a", "SPECIES")
     chip(2, fmt_num(fld(sv, "index"), 2), "MOSQUITOES PER 24 TRAP-HOURS")
     chip(3, if (is.finite(pf)) paste0(round(pf), "%") else "n/a", "FEMALE SHARE")
-    chip(4, fmt_num(fld(sv, "effort_days"), 1), "24-HOUR EFFORT UNITS")
+    # Same number as the app's effort tile: all sampled effort, including
+    # intervals whose catch is still pending (the rate uses resolved effort).
+    chip(4, fmt_num(fld(meta, "valid_effort_days") %||% fld(sv, "effort_days"), 1), "24-HOUR EFFORT UNITS")
   }, y = 84)
 
   # ---- caveat + notes under the index -------------------------------------
@@ -149,12 +152,6 @@ build_mos_report_pdf <- function(file, label, sv, board, peak, meta,
             lx <- lx + 3.2 + graphics::strwidth(g, cex = 0.56)
           }
         }
-        top_share <- numf(fld(sv, "top_share")); ix_ex <- numf(fld(sv, "index_excl_top"))
-        if (is.finite(top_share) || is.finite(ix_ex)) {
-          parts <- c(if (is.finite(top_share)) sprintf("The top species makes up %d%% of the catch", round(if (top_share <= 1) 100 * top_share else top_share)),
-                     if (is.finite(ix_ex)) sprintf("the site index without it is %s", fmt_num(ix_ex, 2)))
-          graphics::text(4, 44.4, paste0(paste(parts, collapse = "; "), "."), col = P$ink2, cex = 0.64, adj = 0)
-        }
       }
     }
   }, x = 4, y = 60)
@@ -170,14 +167,14 @@ build_mos_report_pdf <- function(file, label, sv, board, peak, meta,
       "No clear peak in the weekly activity index."
     } else {
       mo <- if (!is.null(ml) && !is.na(ml) && nzchar(ml)) paste0(" (", ml, ")") else ""
-      tail_s <- if (is.finite(yt) && yt == 1) ", in the one season trapped here."
-        else if (is.finite(ny) && is.finite(yt)) sprintf(", in %d of %d years trapped.", round(ny), round(yt))
-        else "."
-      paste0("Activity peaked around week ", round(wk), mo, tail_s)
+      sup <- if (exists("peak_support_text")) peak_support_text(peak) else ""
+      paste0("Activity peaked around week ", round(wk), mo, if (nzchar(sup)) paste0(", ", sup), ".")
     }
-    graphics::text(4, 36.8, s, col = P$ink, cex = 0.8, adj = 0)
-    graphics::text(4, 34.6, "The weekly index is a median across years, so one unusual year does not set the peak.",
-                   col = P$muted, cex = 0.62, adj = 0)
+    yy_p <- 36.8
+    for (ln in strwrap(s, width = 110)) { graphics::text(4, yy_p, ln, col = P$ink, cex = 0.8, adj = 0); yy_p <- yy_p - 1.9 }
+    if (is.finite(ny) && ny >= 3)
+      graphics::text(4, yy_p - 0.3, "Each week's value is the median across the years it was trapped, so one unusual year does not set the peak.",
+                     col = P$muted, cex = 0.62, adj = 0)
   }, x = 4, y = 36.8)
 
   # ---- data coverage -------------------------------------------------------
@@ -191,15 +188,22 @@ build_mos_report_pdf <- function(file, label, sv, board, peak, meta,
       else sprintf("Data: %d to %d (%d seasons with trapping).", r[1], r[2], length(unique(yrs)))
     } else "Data: years not available."
     graphics::text(4, 26.8, ytxt, col = P$ink, cex = 0.8, adj = 0)
-    na_ <- numf(fld(meta, "n_occ_attempted")); nz <- numf(fld(meta, "n_zero_catch"))
-    if (is.finite(na_)) {
-      s2 <- sprintf("%s trap collections were attempted", format(round(na_), big.mark = ","))
-      if (is.finite(nz)) s2 <- paste0(s2, sprintf(", and %s of them (%d%%) caught no mosquitoes. Those zeros stay in the effort.",
-                                                 format(round(nz), big.mark = ","), round(100 * nz / max(1, na_))))
-      else s2 <- paste0(s2, ".")
-      graphics::text(4, 24.6, s2, col = P$ink2, cex = 0.66, adj = 0)
+    nv <- numf(fld(meta, "n_valid_intervals")); nr <- numf(fld(meta, "n_occ_attempted"))
+    nz <- numf(fld(meta, "n_zero_catch")); nu <- numf(fld(meta, "n_unavailable_outcome"))
+    big <- function(x) format(round(x), big.mark = ",")
+    s2 <- NULL
+    if (is.finite(nv) && is.finite(nr)) {
+      s2 <- sprintf("%s day or night trap intervals were sampled; %s have a known catch", big(nv), big(nr))
+      if (is.finite(nz)) s2 <- paste0(s2, sprintf(", and %s of those (%d%%) caught no mosquitoes, which count as zeros", big(nz), round(100 * nz / max(1, nr))))
+      s2 <- paste0(s2, ".")
+      if (is.finite(nu) && nu > 0) s2 <- c(s2, sprintf("%s more intervals still have a pending or unknown catch and are left out of the rates.", big(nu)))
+    } else if (is.finite(nr)) {
+      s2 <- sprintf("%s trap intervals with a known catch%s.", big(nr),
+                    if (is.finite(nz)) sprintf(", %s of them (%d%%) with no mosquitoes", big(nz), round(100 * nz / max(1, nr))) else "")
     }
-    graphics::text(4, 22.4, "A CO2 trap draws host-seeking females, so the catch reflects trap pull and weather as well as how many mosquitoes are around.",
+    yy_d <- 24.6
+    for (ln in unlist(lapply(s2, strwrap, width = 120))) { graphics::text(4, yy_d, ln, col = P$ink2, cex = 0.66, adj = 0); yy_d <- yy_d - 1.9 }
+    graphics::text(4, yy_d - 0.3, "A CO2 trap draws host-seeking females, so the catch reflects trap pull and weather as well as how many mosquitoes are around.",
                    col = P$muted, cex = 0.62, adj = 0)
   }, x = 4, y = 26.8)
 
