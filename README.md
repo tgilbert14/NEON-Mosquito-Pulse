@@ -8,7 +8,7 @@ An unofficial, art-forward explorer for NEON **Mosquitoes sampled from CO₂ tra
 
 ## What is measured
 
-The headline metric is eligible whole-trap-scaled mosquitoes per 24 trap-hours. It is a within-site trap-activity index—not population abundance, density, infection, transmission, exposure, or health risk.
+The headline metric is eligible whole-trap-scaled mosquitoes per 24 trap-hours. It is a within-site trap-activity index, not population abundance, density, infection, transmission, exposure, or health risk.
 
 The bundle is opportunity-complete:
 
@@ -46,7 +46,7 @@ Rscript --vanilla scripts/verify_bundle.R
 node scripts/check_cover.mjs
 ```
 
-The refresh workflow builds all 47 sites in empty staging, validates the exact candidate, and opens a review PR. It cannot push unchecked data to `master`.
+The refresh workflow builds all 47 sites in empty staging, validates the exact candidate, pushes it to `automation/mosquito-release-2026` and stops. It opens one `data-refresh` issue with the compare link; a person opens the PR to `master`, waits for green checks on that exact head, and merges it. The workflow never pushes to `master` and never opens a PR.
 
 ## Data and art provenance
 

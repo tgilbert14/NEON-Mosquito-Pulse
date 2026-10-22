@@ -1,20 +1,21 @@
+/* adapted from NEON-Breeding-Birds@4805cb5; diverged locally */
 /* =========================================================================
-   pincards.js — tap-to-pin cards + export-with-pins for the Size Lab scatter.
+   pincards.js: tap-to-pin cards + export-with-pins for the Size Lab scatter.
 
    Ported from the Big 12 Girth Index pin-card system (ggiraph) onto PLOTLY:
    the same draggable/resizable navy card + gold leader line + html-to-image
-   "download with the pins baked in" — but the click is detected with plotly's
+   "download with the pins baked in", but the click is detected with plotly's
    native `plotly_click` event and the card HTML rides in each point's
    `customdata`, so there's no second rendering stack (the app stays plotly).
 
    The pins, the leader-line SVG layer, and the gold anchor dots all live INSIDE
    the chart's `.smt-pinnable` box (not the plot div), so they travel with the
-   box and — crucially — get captured when html-to-image snapshots the box.
+   box and, crucially, get captured when html-to-image snapshots the box.
 
    Anchors are stored as DATA coordinates (not frozen pixels), so they reposition
    correctly on resize / fullscreen / relayout. The plotly_click handler is
    RE-attached on every (re)render: a Shiny+plotly re-render runs purge+newPlot
-   on the SAME div, which silently wipes gd.on() listeners — so a one-time bind
+   on the SAME div, which silently wipes gd.on() listeners, so a one-time bind
    (the old __smtPinBound guard) left the chart dead after the first re-render.
    ========================================================================= */
 (function () {
@@ -168,7 +169,7 @@
     var dup = Array.prototype.find.call(box.querySelectorAll(".smt-pin"),
       function (p) { return p.__key === key; });
     if (dup) { dup.classList.remove("smt-pulse"); void dup.offsetWidth; dup.classList.add("smt-pulse"); return; }
-    /* anchor from the DATA point (not the finger): exact, and touch-safe — on
+    /* anchor from the DATA point (not the finger): exact, and touch-safe: on
        touch devices plotly's synthesized event has no usable clientX/Y */
     makePin(gd, box, html, pt.x, pt.y, key);
   }
@@ -189,7 +190,7 @@
     return tags.sort().join(",");
   }
 
-  /* (re)bind a plotly graph div. Safe to call repeatedly — it removes any prior
+  /* (re)bind a plotly graph div. Safe to call repeatedly; it removes any prior
      handler first. Clears pins when the underlying DATA changed (filter / select). */
   function bindPlot(gd) {
     if (!gd || typeof gd.on !== "function") return;
@@ -230,37 +231,74 @@
     requestAnimationFrame(function () { scanPending = false; scan(); });
   }
 
-  /* ---- exports (with a toast + double-fire guard) ------------------------- */
-  function toastStart(msg) {
-    if (typeof Swal === "undefined") return;
-    Swal.fire({ toast: true, position: "top-end", title: msg, showConfirmButton: false,
-      allowOutsideClick: false, didOpen: function () { if (Swal.showLoading) Swal.showLoading(); } });
+  /* ---- exports (status text + double-fire guard) -------------------------
+     Status goes to an aria-live="polite" span right after the button that was
+     pressed (span.smt-status), or to one fixed #smtStatus region when no button
+     is known. No SweetAlert dependency. */
+  var lastSnapBtn = null;
+  document.addEventListener("click", function (e) {   // capture: runs before the inline onclick
+    var b = e.target && e.target.closest && e.target.closest(".smt-snap-btn");
+    if (b) lastSnapBtn = b;
+  }, true);
+  function statusEl() {
+    var btn = lastSnapBtn && document.body.contains(lastSnapBtn) ? lastSnapBtn : null;
+    var el;
+    if (btn) {
+      el = btn.nextElementSibling;
+      if (!el || !el.classList.contains("smt-status")) {
+        el = document.createElement("span");
+        el.className = "smt-status";
+        el.setAttribute("role", "status");
+        el.setAttribute("aria-live", "polite");
+        btn.insertAdjacentElement("afterend", el);
+      }
+      return el;
+    }
+    el = document.getElementById("smtStatus");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "smtStatus";
+      el.className = "smt-status smt-status-fixed";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      document.body.appendChild(el);
+    }
+    return el;
   }
-  function toastDone(msg, isErr) {
-    if (typeof Swal === "undefined") return;
-    Swal.fire({ toast: true, position: "top-end", icon: isErr ? "error" : "success",
-      title: msg, showConfirmButton: false, timer: 2200 });
+  var statusTimer = null;
+  function setStatus(msg, opts) {
+    opts = opts || {};
+    var el = statusEl();
+    clearTimeout(statusTimer);
+    el.classList.toggle("is-err", !!opts.err);
+    // a region created this tick may not be announced yet: set text next frame
+    requestAnimationFrame(function () { el.textContent = msg; });
+    if (opts.clearAfter) statusTimer = setTimeout(function () { el.textContent = ""; }, opts.clearAfter);
   }
   function downloadUrl(url, name) {
     var a = document.createElement("a"); a.download = name; a.href = url; a.click();
   }
   var saving = false;
-  function snap(node, name, beforeEl) {
-    if (!node || typeof htmlToImage === "undefined" || saving) return;
+  function snap(node, name) {
+    if (saving) return;
+    if (!node || typeof htmlToImage === "undefined") {
+      setStatus("Image export unavailable", { err: true, clearAfter: 6000 });
+      return;
+    }
     saving = true;
     // force the plotly chart to its current size first (a tab that rendered while
     // hidden, or a just-toggled fullscreen, can leave a 0-sized / stale SVG)
     var gd = node.querySelector ? node.querySelector(".js-plotly-plot") : null;
     if (gd && window.Plotly && Plotly.Plots) { try { Plotly.Plots.resize(gd); } catch (e) {} }
     node.querySelectorAll(".smt-pin.smt-pulse").forEach(function (p) { p.classList.remove("smt-pulse"); });
-    toastStart("Rendering image…");
+    setStatus("Rendering image");
     setTimeout(function () {
       htmlToImage.toPng(node, { pixelRatio: 2, backgroundColor: bgColor(), cacheBust: true, skipFonts: true,
         filter: function (n) { return !(n.classList && (n.classList.contains("smt-pin-close") ||
           n.classList.contains("smt-pin-resize") || n.classList.contains("smt-snap-btn") ||
-          n.classList.contains("smt-clear-btn"))); } })   // keep cards + leader lines; drop chrome buttons
-        .then(function (url) { downloadUrl(url, name); toastDone("Saved ✓"); })
-        .catch(function () { toastDone("Render failed — try again", true); })
+          n.classList.contains("smt-clear-btn") || n.classList.contains("smt-status"))); } })   // keep cards + leader lines; drop chrome
+        .then(function (url) { downloadUrl(url, name); setStatus("Saved", { clearAfter: 4000 }); })
+        .catch(function () { setStatus("Render failed. Try again.", { err: true }); })
         .then(function () { saving = false; });
     }, 90);
   }
@@ -268,7 +306,7 @@
   window.smtSaveClimate = function () { snap(document.getElementById("climatePin"), "neon-mosquito-climate-gradient.png"); };
   window.smtSaveQcCard = function () {
     var node = document.getElementById("qcCardNode");
-    if (!node) return;
+    if (!node) { snap(null); return; }
     var short = node.getAttribute("data-short") || "qc";
     snap(node, "neon-qc-" + short.replace(/[^A-Za-z0-9]+/g, "") + ".png");
   };

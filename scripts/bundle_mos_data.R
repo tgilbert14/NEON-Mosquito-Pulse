@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# Build opportunity-complete RELEASE-2026 site bundles from staged raw objects.
+# Build opportunity-complete site bundles for the pinned release from staged raw objects.
 suppressWarnings(suppressMessages({
   library(dplyr)
   library(tibble)
@@ -9,7 +9,7 @@ source("R/mos_helpers.R")
 
 raw_dir <- Sys.getenv("MOS_RAW_DIR", "../mosquito-data-fetch")
 out_dir <- Sys.getenv("MOS_SITE_OUT_DIR", "data/sites")
-release <- Sys.getenv("MOS_RELEASE", "RELEASE-2026")
+release <- Sys.getenv("MOS_RELEASE", MOS_RELEASE$release)
 demo_site <- "SRER"
 files <- sort(list.files(raw_dir, pattern = "_raw[.]rds$", full.names = TRUE))
 if (!length(files)) stop("No <SITE>_raw.rds files in ", raw_dir, call. = FALSE)

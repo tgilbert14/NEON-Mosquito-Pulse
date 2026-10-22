@@ -1,16 +1,19 @@
 #!/usr/bin/env Rscript
-# Fetch the immutable NEON RELEASE-2026 package into an isolated staging area.
+# Fetch the immutable pinned NEON release (R/mos_release.R) into an isolated staging area.
 options(timeout = 3600)
 suppressPackageStartupMessages(library(neonUtilities))
+source("R/mos_release.R")
 source("R/site_metadata.R")
 
-product <- "DP1.10043.001"
-release <- Sys.getenv("MOS_RELEASE", "RELEASE-2026")
-if (!identical(release, "RELEASE-2026")) stop("Release must be RELEASE-2026", call. = FALSE)
-start_month <- "2014-01"
-end_month <- "2024-12"
+product <- MOS_RELEASE$product
+release <- Sys.getenv("MOS_RELEASE", MOS_RELEASE$release)
+if (!identical(release, MOS_RELEASE$release)) stop("Release must be ", MOS_RELEASE$release,
+  " (R/mos_release.R); change that file to move releases", call. = FALSE)
+start_month <- MOS_RELEASE$start_month
+end_month <- MOS_RELEASE$end_month
 out_dir <- Sys.getenv("MOS_RAW_DIR", "../mosquito-data-fetch")
 token <- Sys.getenv("NEON_TOKEN", "")
+if (!nzchar(token)) stop("NEON_TOKEN is empty; NEON data endpoints refuse anonymous requests (see .env.example)", call. = FALSE)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 sites <- sort(unique(as.character(neon_sites$site)))
@@ -57,7 +60,7 @@ for (site in sites) {
       loadByProduct(
         dpID = product, site = site, startdate = start_month, enddate = end_month,
         package = "basic", release = release, check.size = "F",
-        token = if (nzchar(token)) token else NA_character_
+        token = token
       ),
       error = function(e) stop(site, " fetch failed: ", conditionMessage(e), call. = FALSE)
     )
@@ -68,8 +71,8 @@ for (site in sites) {
   missing <- setdiff(required, names(raw))
   if (length(missing)) stop(site, " missing release tables: ", paste(missing, collapse = ", "), call. = FALSE)
   rows[[site]] <- data.frame(
-    product = product, release = release, doi = "10.48443/rmw1-me46",
-    release_generated = "2026-01-23", site = site,
+    product = product, release = release, doi = MOS_RELEASE$doi,
+    release_generated = MOS_RELEASE$release_generated, site = site,
     trapping_rows = nrow(raw$mos_trapping), sorting_rows = nrow(raw$mos_sorting),
     identification_rows = nrow(raw$mos_expertTaxonomistIDProcessed),
     raw_md5 = unname(tools::md5sum(path)),

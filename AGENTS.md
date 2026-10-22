@@ -23,9 +23,9 @@ Start and end every session with `git status --short --branch`. Preserve changes
 
 1. Runtime boots entirely from committed bundles and local assets.
 2. `manifest.json` is generated only in the pinned R 4.5.2/Jammy validator using the dated 2026-07-15 package snapshot.
-3. A refresh builds all 47 release sites in empty staging, verifies the exact roster and science contract, and publishes a review PR. It never writes unchecked bytes to `master`.
+3. A refresh builds all 47 release sites in empty staging, verifies the exact roster and science contract, pushes the candidate to `automation/mosquito-release-2026`, and stops. A person opens and merges the PR. The workflow never writes to `master` and never opens a PR.
 4. Every custom Shiny message handler accepts exactly one payload argument.
-5. A release needs green checks on the exact PR head and merge, exact manifest equality, Connect's `mosquito-pulse-v1` marker, and Pages' `mosquito-pulse-poster-v1` marker.
+5. A release needs green checks on the exact PR head and merge, exact manifest equality, Pages' `mosquito-pulse-poster-v1` marker, and the post-deploy smoke proving Connect serves this revision: its `neon-app-revision` meta equals the md5 of the merged `manifest.json`, with `<title>NEON Mosquito Pulse</title>` and `<html lang="en">`.
 6. The Pages and app covers use the static Living Poster, local responsive art,
    descriptive alternative text, durable recorded provenance, and an accurate
    unlit CO₂ fan-trap depiction. Keep visible illustration badges and captions off

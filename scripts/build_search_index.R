@@ -21,6 +21,7 @@ suppressWarnings(suppressMessages({ library(dplyr) }))
 
 # reuse the SINGLE measure builder so the Search index never diverges from the
 # Swarm Board / hero (the single-builder-precompute rule).
+source("R/mos_release.R", local = TRUE)
 source("R/mos_helpers.R", local = TRUE)
 
 SITE_DIR <- "data/sites"
@@ -77,7 +78,7 @@ taxa <- taxa[!is.na(taxa$scientificName) & nzchar(taxa$scientificName), , drop =
 taxa <- taxa[order(taxa$scientificName, dplyr::desc(taxa$activity_index)), , drop = FALSE]
 sites <- sites[order(sites$site), , drop = FALSE]
 
-out <- list(taxa = taxa, sites = sites, release = "RELEASE-2026")
+out <- list(taxa = taxa, sites = sites, release = MOS_RELEASE$release)
 saveRDS(out, "data/search_index.rds", compress = "xz")
 
 sz <- file.info("data/search_index.rds")$size

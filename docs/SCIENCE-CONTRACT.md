@@ -3,7 +3,7 @@
 ## Product and release identity
 
 - NEON product: **Mosquitoes sampled from CO₂ traps** (`DP1.10043.001`).
-- Immutable source: **RELEASE-2026**, generated 2026-01-23.
+- Immutable source: **RELEASE-2026**, generated 2026-01-23. The release is named in one file, `R/mos_release.R`; the producer, bundler, validator, search index, app copy and the refresh workflow's release watch all read it.
 - DOI: **10.48443/rmw1-me46**.
 - Release coverage used here: 2014-01 through 2024-12, 47 terrestrial sites.
 - Primary tables: `mos_trapping`, `mos_sorting`, `mos_expertTaxonomistIDProcessed`.
@@ -21,14 +21,19 @@ The stable key is:
 
 `sampleID` links a non-empty collected sample to sorting and identification. It can be absent when no target mosquitoes were collected, so it cannot define or count opportunities.
 
-An opportunity enters the activity denominator only when sampling occurred, `trapHours > 0`, and plot/date identity is usable. Its continuous contribution is `trapHours / 24`.
+An opportunity is **sampled** (`valid_effort`) when sampling occurred, `trapHours > 0`, and plot/date identity is usable. Its continuous contribution is `trapHours / 24`.
+
+A sampled opportunity enters the **rate denominators** (activity index, pulse, ubiquity, incidence, Chao2, accumulation, map grids) only when its catch is resolved: `positive_catch` or `zero_catch` (`denominator_ok`). Sampled intervals whose catch is pending, held or unknown are counted (`meta$n_unavailable_outcome`, `meta$unavailable_effort_days`, `effort_week$unavailable_days`), shown in the app's effort tile and site data-quality card, and left out of every rate, because counting their hours with nothing in the numerator would read as a zero catch. The effort tile reports all sampled effort (`meta$valid_effort_days`). A pending interval with `targetTaxaPresent = Y` is a known positive treated as missing at random, a small residual low bias that is still smaller than imputing zero. Bundle schema `mosquito-pulse-opportunity-v2`.
 
 "Sampling occurred" is read from `samplingImpractical` through an explicit code map taken from the NEON User Guide (vH, Table 1): `OK` and a missing value (rows that predate the field) mean the interval was sampled; `Location snow covered`, `Location flooded`, `Temperature low`, `Logistical`, `Management`, `Extreme weather` and `Other` mean it was not. Any other value stops the bundle build. The validator (`scripts/verify_bundle.R`) re-checks the vocabulary with its own copy of the list, fails any site where an `OK` or missing-code interval is classed not sampled, and fails any site whose last valid interval trails NEON's last available month for the release (recorded in the source receipt from the products endpoint) by more than six months.
 
 Protocol eras remain explicit:
 
-- 2013–2017: two nighttime intervals plus the intervening daytime interval per bout.
-- 2018–present: one nighttime interval plus the following daytime interval, approximately 24 hours total per plot/bout.
+- 2013 to 2017: two nighttime intervals plus the intervening daytime interval per bout.
+- 2018 to present: one nighttime interval plus the following daytime interval, approximately 24 hours total per plot/bout.
+- From 2024 the network baits traps with CO₂ canisters instead of dry ice (NEON changeLog 2023-11-08); PUUM switched in mid-2022.
+
+Multi-year views pool these designs; the app notes the pooling on the Pulse and marks 2018 and 2024 on the yearly chart.
 
 ## Outcome and zero contract
 
@@ -59,8 +64,8 @@ Eligibility requires one unambiguous sorting record per `subsampleID` and `0 < p
 ### CAN
 
 - Describe whole-trap-scaled catch per 24 trap-hours within a site.
-- Show phenology across weeks with opportunity-complete denominators and real zeros.
-- Compare species incidence/ubiquity against all valid sampled intervals.
+- Show phenology across weeks with resolved-effort denominators and real zeros; a week whose sampled intervals are all pending is a gap.
+- Compare species incidence/ubiquity against all sampled intervals with a resolved catch.
 - Describe day/night support, protocol era, sample condition, apparatus flags, and held records.
 - Explore cross-site climate associations as descriptive, confounded space-for-time patterns.
 
@@ -78,6 +83,7 @@ Eligibility requires one unambiguous sorting record per `subsampleID` and `0 < p
 - Identifications with invalid/conflicting subsample expansion.
 - Catches without an eligible sorting or effort linkage.
 - Intervals without usable duration or identity.
+- Sampled intervals whose catch is pending, held or unknown: counted and disclosed, never in a rate denominator.
 - PUUM climate-gradient placement until an equivalent pinned environmental overlay is available; its mosquito bundle remains eligible elsewhere.
 
 ## Trap illustration boundary

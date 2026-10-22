@@ -2,7 +2,9 @@ field,layer,unit,meaning,eligibility
 effort_id,effort,,Unique physical day/night trap interval,NEON uid or full event/plot/timestamp/day-night fallback
 sampleID,effort and obs,,Outcome linkage from trapping to sorting,May be absent for supported zeros
 valid_effort,effort,boolean,Interval contributes to denominator,Sampling occurred and positive trapHours with usable identity
-effort_days,effort,24-hour units,trapHours divided by 24,Valid effort only
+effort_days,effort,24-hour units,trapHours divided by 24,Valid effort only; rate denominators sum it over denominator_ok rows
+denominator_ok,effort,boolean,Interval enters rate denominators,valid_effort and outcome positive_catch or zero_catch
+unavailable_days,effort and effort_week,24-hour units,Sampled effort whose catch is pending held or unknown,Disclosed; never in a rate denominator
 outcome_status,effort,category,Positive zero pending/held unknown or ineligible state,Derived before aggregation
 zero_catch,effort,boolean,Supported zero target catch,Valid effort and targetTaxaPresent=N only
 count,obs,estimated mosquitoes,individualCount times expansionFactor,Eligible sort/effort linkage and positive count

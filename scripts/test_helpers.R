@@ -48,8 +48,14 @@ bundle <- mos_build_bundle(list(
 
 expect(nrow(bundle$effort) == 4L, "all trapping records must survive into the effort table")
 expect(length(unique(bundle$effort$effort_id)) == 4L, "day/night intervals must have distinct effort keys")
-expect(bundle$meta$n_occ_attempted == 3L, "missed sampling must not enter the valid denominator")
-expect(abs(bundle$meta$effort_days - 2) < 1e-9, "12h + 12h + 24h must equal two 24-hour effort units")
+expect(bundle$meta$n_valid_intervals == 3L, "missed sampling must not enter the valid intervals")
+expect(bundle$meta$n_occ_attempted == 2L, "an interval with a pending or held catch must not enter the rate denominator")
+expect(abs(bundle$meta$effort_days - 1) < 1e-9, "resolved effort is the 12h positive + 12h zero intervals = one 24-hour unit")
+expect(abs(bundle$meta$valid_effort_days - 2) < 1e-9, "12h + 12h + 24h of sampled effort must equal two 24-hour units")
+expect(abs(bundle$meta$unavailable_effort_days - 1) < 1e-9 && bundle$meta$n_unavailable_outcome == 1L,
+       "the held interval's 24h must be disclosed as unavailable effort, not dropped silently")
+expect(abs(sum(bundle$effort_week$effort_days) - 1) < 1e-9, "effort_week must carry resolved effort only")
+expect(identical(bundle$meta$schema_version, "mosquito-pulse-opportunity-v2"), "resolved-effort bundles are schema v2")
 expect(bundle$meta$n_zero_catch == 1L, "only targetTaxaPresent=N is a supported zero catch")
 expect(bundle$meta$n_held_identifications == 1L, "invalid proportionIdentified must be held")
 expect(abs(sum(bundle$obs$count) - 14) < 1e-9, "eligible identified counts must expand continuously by 1/p")
@@ -97,12 +103,14 @@ board <- vector_board(bundle$obs, bundle$meta$n_occ_attempted, bundle$meta$effor
 headline <- site_vectors(bundle$obs, bundle$meta$n_occ_attempted, bundle$meta$effort_days,
                          bundle$effort_week, bundle$meta$n_traps)
 expect(nrow(board) == 1L, "species board must include species-level target taxa only")
-expect(abs(headline$index - 7) < 1e-9, "headline total must retain genus-level target catch (14 / 2)")
+expect(abs(headline$index - 14) < 1e-9, "headline total must retain genus-level target catch over resolved effort (14 / 1)")
+expect(isTRUE(headline$coarse_share > 0.28 && headline$coarse_share < 0.29), "coarse-ID share must count the genus-level catch (4 of 14)")
+expect(isTRUE(headline$top_share == 71), "the largest single record (10 of 14) must be reported as its share of the catch")
 expect(abs(vector_board(bundle$obs, bundle$meta$n_occ_attempted, 0.5)$index[1] - 20) < 1e-9,
        "continuous sub-day effort must not be silently floored to one 24-hour unit")
 
 acc <- mos_accum(bundle$obs, bundle$effort, perms = 8)
-expect(nrow(acc) == 3L, "accumulation must include all valid opportunities, including zero catch")
+expect(nrow(acc) == 2L, "accumulation must include every resolved opportunity, including zero catch")
 
 fallback <- trapping[1:2, ]
 fallback$uid <- NA_character_
@@ -144,5 +152,22 @@ bad_sort <- dplyr::bind_rows(sorting, tibble::tibble(
   subsampleID = "sub-night", sampleID = "sample-night", proportionIdentified = 0.25))
 errored <- tryCatch({ mos_normalize_sorting(bad_sort); FALSE }, error = function(e) TRUE)
 expect(errored, "conflicting duplicate subsample mappings must fail closed")
+
+# pulse_peak: a one-year spike must not beat a multi-year median peak
+pk <- data.frame(week = 20:23, index = c(5, 9, 50, 4), q25 = 0, q75 = 0, n_years = c(3L, 4L, 1L, 4L))
+pp <- pulse_peak(pk)
+expect(identical(pp$week, 21L) && identical(pp$n_years, 4L) && identical(pp$years_total, 4L),
+       "the peak week needs at least half the trapped years behind it")
+expect(identical(pulse_peak(data.frame(week = 30L, index = 2, q25 = 2, q75 = 2, n_years = 1L))$years_total, 1L),
+       "a one-season site still gets a peak, flagged as one season")
+bp <- pulse_phenology(bundle$obs, bundle$effort_week)
+expect(all(bp$q25 <= bp$index & bp$index <= bp$q75) && all(bp$q25 >= 0), "the pulse band is the 25th to 75th percentile and never below zero")
+cy <- catch_by_year(bundle$obs, "Aedes albopictus", bundle$effort_week, bundle$effort)
+expect(nrow(cy) == 1L && abs(cy$index - 10) < 1e-9 && !cy$raw, "the yearly chart divides catch by that year's resolved effort")
+cz <- catch_by_year(bundle$obs, "Culex pipiens", bundle$effort_week, bundle$effort)
+expect(nrow(cz) == 1L && cz$mosquitoes == 0, "a year with effort and no catch of the species is a zero, not a gap")
+ch <- chao2_collections(tibble::tibble(scientificName = c("a", "b", "c", "c"), occ_id = c("1", "2", "3", "4"),
+  is_target = TRUE, is_species = TRUE), n_occ = 10)
+expect(abs(ch$chao2 - (3 + 0.9 * 2 * 1 / (2 * 2))) < 0.051, "Chao2 point estimate uses the bias-corrected (Q2 + 1) form")
 
 cat("OK: Mosquito opportunity, zero-catch, expansion, richness, and accumulation contracts passed.\n")
