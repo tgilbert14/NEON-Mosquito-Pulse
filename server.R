@@ -34,6 +34,11 @@ server <- function(input, output, session) {
             as.integer(sv$top_share), format(sv$index_excl_top, nsmall = 2))
   }
 
+  # "because no species / only 1 species / only N species turned up exactly twice"
+  q2_phrase <- function(q2) if (q2 == 0) "no species" else sprintf("only %d species", q2)
+  number_word <- function(n) if (n >= 1 && n <= 12) c("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
+    "Nine", "Ten", "Eleven", "Twelve")[n] else as.character(n)
+
   observe({ ch <- mos_state_choices(); updateSelectInput(session, "stateSel", choices = ch, selected = if ("AZ" %in% ch) "AZ" else NULL) })
   observeEvent(input$stateSel, {
     sites <- mos_sites_in_state(input$stateSel)
@@ -300,8 +305,8 @@ server <- function(input, output, session) {
       cov <- site_coverage(rv$obs, rv$nocc)
       ci_ok <- is.finite(ch$ci_lo) && is.finite(ch$ci_hi)
       if (ch$unstable && is.finite(cov))
-        pts <- c(pts, if (ci_ok) sprintf("Traps caught <b>%d</b> species. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found, so the ones still missing are rare in these traps. Chao2 puts the total at <b>%.0f to %.0f</b> species, a wide range because only %d species turned up exactly twice.", ch$S_obs, round(100 * cov), ch$ci_lo, ch$ci_hi, ch$Q2)
-          else sprintf("Traps caught <b>%d</b> species. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found. Chao2 gives about <b>%.0f</b>, a volatile estimate because only %d species turned up exactly twice.", ch$S_obs, round(100 * cov), ch$chao2, ch$Q2))
+        pts <- c(pts, if (ci_ok) sprintf("Traps caught <b>%d</b> species. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found, so the ones still missing are rare in these traps. Chao2 puts the total at <b>%.0f to %.0f</b> species, a wide range because %s turned up exactly twice.", ch$S_obs, round(100 * cov), ch$ci_lo, ch$ci_hi, q2_phrase(ch$Q2))
+          else sprintf("Traps caught <b>%d</b> species. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found. Chao2 gives about <b>%.0f</b>, a volatile estimate because %s turned up exactly twice.", ch$S_obs, round(100 * cov), ch$chao2, q2_phrase(ch$Q2)))
       else
         pts <- c(pts, sprintf("Traps caught <b>%d</b> species; <b>Chao2</b> (across %s sampled intervals) estimates at least <b>%.0f</b> really use the site. CO2 traps miss day-active and rare mosquitoes.", ch$S_obs, fmt_int(ch$m), ch$chao2))
     }
@@ -397,8 +402,12 @@ server <- function(input, output, session) {
   })
   output$pulseInsight <- renderUI({
     req(!is.null(rv$obs)); pk <- pulse_phenology(rv$obs, rv$effw); req(!is.null(pk), nrow(pk) >= 2)
-    if (!any(pk$index > 0,na.rm=TRUE)) return(insight_banner("circle", tone="navy",
-      HTML("Valid trapping weeks are shown at <b>zero activity</b>. No target mosquitoes were detected, so this explorer does not estimate a seasonal peak.")))
+    if (!any(pk$index > 0,na.rm=TRUE)) {
+      any_catch <- isTRUE(sum(num(target_only(rv$obs)$count), na.rm = TRUE) > 0)
+      return(insight_banner("circle", tone="navy", HTML(if (any_catch)
+        "No week has a non-zero median across the years it was trapped, so this explorer does not name a seasonal peak."
+        else "Valid trapping weeks are shown at <b>zero activity</b>. No target mosquitoes were detected, so this explorer does not estimate a seasonal peak.")))
+    }
     pkk <- pulse_peak(pk, rv$obs)
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     reg <- precip_regime(cl); desert <- identical(biome_of(rv$site), "desert")
@@ -467,15 +476,22 @@ server <- function(input, output, session) {
     ci_txt <- if (is.finite(ch$ci_lo) && is.finite(ch$ci_hi)) {
       if (round(ch$ci_lo) == round(ch$ci_hi)) sprintf("%.0f species", ch$ci_lo) else sprintf("%.0f to %.0f species", ch$ci_lo, ch$ci_hi)
     } else "wide"
+    uncaught <- max(0, round(ch$chao2 - ch$S_obs))
     chao_pop <- info_pop("Chao2 estimate",
-      p(tags$b("Chao2"), " estimates ", tags$b(sprintf("%.0f", ch$chao2)), " species use the site (95% CI ", tags$b(ci_txt), "; Chao 1987), so roughly ", tags$b(sprintf("%.0f", max(0, round(ch$chao2 - ch$S_obs)))), " remain uncaught."),
+      if (uncaught == 0) p(tags$b("Chao2"), sprintf(" (Chao 1987) finds no sign of species the traps are missing: %s.",
+        if (ch$Q1 == 0) "no species turned up in just one interval" else "just one species turned up in a single interval"))
+      else p(tags$b("Chao2"), " estimates ", tags$b(sprintf("%.0f", ch$chao2)), " species use the site (95% CI ", tags$b(ci_txt), "; Chao 1987), so roughly ", tags$b(sprintf("%.0f", uncaught)), " remain uncaught."),
       if (ch$unstable) p(class="pop-caveat", bsicons::bs_icon("exclamation-triangle"),
-        sprintf(" Only %d species were caught at exactly two occasions (Q2=%d), so this point estimate is volatile. Read the CI and the coverage, not the single number.", ch$Q2, ch$Q2)))
+        sprintf(" %s %s caught at exactly two occasions (Q2 = %d), so this point estimate is volatile. Read the range and the coverage, not the single number.",
+          sub("^only", "Only", sub("^no", "No", q2_phrase(ch$Q2))), if (ch$Q2 == 1) "was" else "were", ch$Q2)))
     if (ch$unstable && is.finite(cov))
-      insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found, so the ones still missing are rare in these traps. Chao2 puts the total at <b>%s</b>, a wide range because only %d species turned up exactly twice. ", ch$S_obs, ch$m, round(100 * cov), ci_txt, ch$Q2)), chao_pop)
+      insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found, so the ones still missing are rare in these traps. Chao2 puts the total at <b>%s</b>, a wide range because %s turned up exactly twice. ", ch$S_obs, ch$m, round(100 * cov), ci_txt, q2_phrase(ch$Q2))), chao_pop)
+    else if (uncaught == 0)
+      insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. <b>Chao2</b> finds no sign of species the traps are missing.",
+        ch$S_obs, ch$m)), chao_pop)
     else
       insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. <b>Chao2</b> estimates <span class='ci-hero'>%.0f</span> use the site (95%% CI %s). Roughly <b>%.0f</b> remain uncaught.",
-        ch$S_obs, ch$m, ch$chao2, ci_txt, max(0, round(ch$chao2 - ch$S_obs)))), chao_pop)
+        ch$S_obs, ch$m, ch$chao2, ci_txt, uncaught)), chao_pop)
   })
 
   # ---- Swarm Board (flagship) ----
@@ -866,7 +882,7 @@ server <- function(input, output, session) {
         p("Every column in the CSV downloads, with units and how it was computed."),
         downloadButton("codebookCsvAbout", tagList(bs_icon("book"), " Column codebook (CSV)"), class = "smt-clear-btn")),
       div(class="about-card", h4(bs_icon("diagram-3"), " The NEON explorer suite"),
-        p(sprintf("%d apps on NEON data, one per product, plus the ", sum(SUITE_APPS$key != "atlas")), tags$a(href = ATLAS_COVER_URL, "NEON Cross-Product Response Atlas"), " that lines them up."),
+        p(sprintf("%s apps on NEON data, one per product, plus the ", number_word(sum(SUITE_APPS$key != "atlas"))), tags$a(href = ATLAS_COVER_URL, "NEON Cross-Product Response Atlas"), " that lines them up."),
         tags$ul(class = "suite-list", lapply(seq_len(nrow(SUITE_APPS)), function(i) {
           a <- SUITE_APPS[i, ]
           tags$li(if (a$key == "mosquito") tags$b(a$name, " (this app)") else tags$a(href = a$app_url, a$name),
