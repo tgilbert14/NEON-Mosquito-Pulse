@@ -437,7 +437,7 @@ jobs:
           {
             echo "notify=$notify"
             echo "head=$published_commit"
-            echo "title=NEON refresh ready: Mosquito Pulse ${rows_added} rows, data through ${through_after}"
+            printf 'title=NEON refresh ready: Mosquito Pulse %+d rows, data through %s\n' "$rows_added" "$through_after"
             echo "summary<<MOS_SUMMARY_EOF"
             echo "$change_line"
             echo "MOS_SUMMARY_EOF"
