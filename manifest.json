@@ -3410,22 +3410,22 @@
       "checksum": "3f602e5ea2de90410a9c002c6f5285ed"
     },
     "R/mos_helpers.R": {
-      "checksum": "b28175587e4dc261700d53bc3235ff9f"
+      "checksum": "1863f12bad2af140a03e42ddd9e22bee"
     },
     "R/mos_release.R": {
       "checksum": "fb62f55649bf42c51cc9b895e5d5d8d3"
     },
     "R/mos_report_pdf.R": {
-      "checksum": "363c51acdb7283f6e0899771d35b2b02"
+      "checksum": "916ddaeb225fc0ecb26c771413229600"
     },
     "R/site_metadata.R": {
       "checksum": "bb6c747ea5efd834b310a2286567d7f3"
     },
     "server.R": {
-      "checksum": "58601f99d45d5ae588419f27f85d9880"
+      "checksum": "51c8b23e01eb8f4d15a362eada18a85d"
     },
     "ui.R": {
-      "checksum": "46169c98b4f465252bf3085ecfd47eff"
+      "checksum": "d19ae62ce2c1176d0121263b37fc2f69"
     },
     "www/app.js": {
       "checksum": "fdd2b4ca07c16efb5bbac15fa06318d6"
