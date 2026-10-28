@@ -54,12 +54,43 @@ add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
   }
 }
 
+source("R/mos_release.R", local = FALSE)
 source("R/site_metadata.R", local = FALSE)
 source("R/mos_helpers.R",   local = FALSE)
+source("R/mos_report_pdf.R", local = FALSE)
 
 NEON_DPID <- "DP1.10043.001"   # Mosquitoes sampled from CO2 traps
 .NEON_PKG <- paste0("neon", "Utilities")
 LIVE_FETCH <- (Sys.getenv("MOS_LIVE", "0") != "0") && requireNamespace(.NEON_PKG, quietly = TRUE)
+
+# Build identity the post-deploy smoke compares with the merged commit's manifest.
+APP_REVISION <- if (file.exists("manifest.json")) unname(tools::md5sum("manifest.json")) else "unknown"
+
+# The NEON explorer suite, for the in-app registry (About) and the persistent
+# Atlas route. The cover keeps only the Atlas link (Living Poster V1).
+ATLAS_COVER_URL <- "https://tgilbert14.github.io/NEON-Driver-Cascade/"
+SUITE_APPS <- data.frame(
+  key = c("small-mammal", "plant-diversity", "breeding-birds", "phenology", "veg-structure",
+          "ground-beetle", "water-chem", "mosquito", "inverts", "atlas"),
+  name = c("Small Mammal Tracker", "Plant Diversity Explorer", "Breeding Bird Explorer", "Plant Phenology Explorer",
+           "Vegetation Structure Explorer", "Ground Beetle Tracker", "Water Chemistry Analyte Viewer", "Mosquito Pulse",
+           "My Little Inverts", "NEON Cross-Product Response Atlas"),
+  dpid = c("DP1.10072.001", "DP1.10058.001", "DP1.10003.001", "DP1.10055.001", "DP1.10098.001",
+           "DP1.10022.001", "DP1.20093.001", "DP1.10043.001", "DP1.20120.001", "several products"),
+  app_url = c("https://019ec337-7100-317e-5052-c3bf32ffcb79.share.connect.posit.cloud/",
+              "https://019ee109-30ae-006e-cb3b-143afeac57e3.share.connect.posit.cloud/",
+              "https://019ee116-75d9-5940-8ccd-9b8c7afabce4.share.connect.posit.cloud/",
+              "https://019ee118-bf17-1622-bd5d-e59cab3b36a7.share.connect.posit.cloud/",
+              "https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/",
+              "https://019ec8ff-2a4b-e0e9-871d-07a047a571d3.share.connect.posit.cloud/",
+              "https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/",
+              "https://019ef0b1-0099-c999-1edc-4d47826044cc.share.connect.posit.cloud/",
+              "https://019ef4fb-c6c4-7ddf-2667-7e1021b2ef10.share.connect.posit.cloud/",
+              "https://019ee1cf-a484-44eb-a181-cd495df24b3b.share.connect.posit.cloud/"),
+  cover_url = paste0("https://tgilbert14.github.io/", c("NEON-Small-Mammal-Tracker-App", "NEON-Plant-Diversity",
+    "NEON-Breeding-Birds", "NEON-Plant-Phenology-Explorer", "NEON-Vegetation-Structure-Explorer", "NEON-Ground-Beetle-Tracker",
+    "NEON-WaterChemistry-Analyte-Viewer-App", "NEON-Mosquito-Pulse", "NEON-My-Little-Inverts", "NEON-Driver-Cascade"), "/"),
+  stringsAsFactors = FALSE)
 
 SITE_DIR  <- "data/sites"
 DEMO_PATH <- "data-sample/demo.rds"
@@ -72,7 +103,11 @@ read_bundle <- function(f) {
   if (is.data.frame(out)) return(out)
   if (is.null(out$effort) || !any(out$effort$valid_effort %in% TRUE)) NULL else out
 }
-load_site_bundle <- function(site) read_bundle(file.path(SITE_DIR, paste0(site, ".rds")))
+load_site_bundle <- function(site) {
+  site <- as.character(site %||% "")[1]
+  if (is.na(site) || !grepl("^[A-Z]{4}$", site)) return(NULL)   # a four-letter NEON code, never a path
+  read_bundle(file.path(SITE_DIR, paste0(site, ".rds")))
+}
 load_demo <- function() { b <- load_site_bundle(DEMO_META$site); if (!is.null(b)) b else read_bundle(DEMO_PATH) }
 
 SITE_INDEX <- tryCatch(readRDS("data/site_index.rds"), error = function(e) NULL)
@@ -145,7 +180,9 @@ asset_url <- function(path) { f <- file.path("www", path)
   v <- if (file.exists(f)) as.integer(as.numeric(file.mtime(f))) else 0L; sprintf("%s?v=%s", path, v) }
 spin <- function(x, img = NULL) shinycssloaders::withSpinner(x, color = DDL$violet, type = 6)
 info_pop <- function(title, ..., placement = "auto")
-  bslib::popover(tags$span(class = "info-dot", bsicons::bs_icon("info-circle")), ..., title = title, placement = placement)
+  bslib::popover(tags$span(class = "info-dot", `aria-label` = paste("About", title), bsicons::bs_icon("info-circle")), ..., title = title, placement = placement)
+# A string as a JavaScript literal (quoted and escaped), for inline handlers.
+js_str <- function(x) as.character(jsonlite::toJSON(as.character(x)[1], auto_unbox = TRUE))
 insight_banner <- function(icon, ..., tone = "navy")
   div(class = paste("chart-insight", paste0("ci-", tone)), bsicons::bs_icon(icon), div(class = "ci-text", ...))
 glow_badge <- function(label, color = "#7c52e0", glow = color)
@@ -161,7 +198,7 @@ temp_unit_lab <- function(unit = "F") if (identical(unit, "C")) "°C" else "°F"
 temp_disp <- function(c, unit = "F") {
   c <- suppressWarnings(as.numeric(c))
   s <- if (identical(unit, "C")) sprintf("%.1f°C", c) else sprintf("%.0f°F", c * 9 / 5 + 32)
-  s[is.na(c)] <- "—"; s
+  s[is.na(c)] <- "n/a"; s
 }
 
 # ---- biome classification (cross-site gradient color / legend) --------------

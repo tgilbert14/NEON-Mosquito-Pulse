@@ -20,7 +20,7 @@ const requiredApp = [
   "after rain?",
   "assets/mosquito-living-poster-v1.webp",
   "NEON-Driver-Cascade",
-  "Skip to site picker",
+  "Skip to main content",
 ];
 for (const value of requiredCover) if (!cover.includes(value)) throw new Error(`cover missing ${value}`);
 for (const value of requiredApp) if (!ui.includes(value)) throw new Error(`app poster missing ${value}`);
@@ -32,6 +32,33 @@ for (const [source, surface] of [[cover, "Pages"], [ui, "app"]]) {
     if (source.includes(label)) throw new Error(`${surface} poster must not restore the visible illustration disclaimer`);
   }
 }
+// No em dashes (U+2014) anywhere on the cover (visible copy, <title>, meta) or in
+// any ui.R string literal. Comments in ui.R are not visible and are not checked.
+const EM_DASH = "\u2014";
+if (cover.includes(EM_DASH)) {
+  const line = cover.split("\n").findIndex((l) => l.includes(EM_DASH)) + 1;
+  throw new Error(`cover must not use an em dash (docs/index.html:${line})`);
+}
+// Walk ui.R once, collecting string literals and skipping # comments, so a
+// quote inside a comment or a # inside a string is read correctly.
+function rStringLiterals(source) {
+  const out = [];
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "#") {
+      while (i < source.length && source[i] !== "\n") i++;
+    } else if (ch === '"' || ch === "'") {
+      let j = i + 1;
+      while (j < source.length && source[j] !== ch) j += source[j] === "\\" ? 2 : 1;
+      out.push(source.slice(i, j + 1));
+      i = j;
+    }
+  }
+  return out;
+}
+const uiLiterals = rStringLiterals(ui);
+const uiDash = uiLiterals.find((literal) => literal.includes(EM_DASH));
+if (uiDash) throw new Error(`app copy must not use an em dash: ${uiDash.slice(0, 80)}`);
 if (/<figcaption\b/i.test(cover)) throw new Error("Pages poster must not restore a visible art caption");
 if (/tags\$figcaption\s*\(/.test(ui)) throw new Error("app poster must not restore a visible art caption");
 const coverFace = cover.match(/<main id="main" class="poster"[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";

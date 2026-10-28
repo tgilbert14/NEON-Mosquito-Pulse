@@ -101,7 +101,7 @@ body {
 [data-bs-theme="dark"] .card-header:has(.nav-tabs) { background: #221b3c !important; }
 [data-bs-theme="dark"] .brand-title,
 [data-bs-theme="dark"] .bio-links-title,
-[data-bs-theme="dark"] .tab-head-text h4,
+[data-bs-theme="dark"] .tab-head-text h2,
 [data-bs-theme="dark"] .hr-indiv-lab,
 [data-bs-theme="dark"] .stat-sub { color: var(--pine) !important; }
 [data-bs-theme="dark"] .tab-intro .bi,
@@ -273,7 +273,11 @@ body {
 /* ---- DDL footer ----------------------------------------------------------- */
 .ddl-footer { margin-top: 22px; padding: 18px 4px 30px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .ddl-footer .custom-cta { color: var(--violet); font-weight: 700; text-decoration: none; }
-.ddl-footer .custom-cta:hover { text-decoration: underline; }
+.ddl-footer .custom-cta:hover { text-decoration: underline; color: var(--ink); }
+/* styles.css paints the pill cream (#fffdf6); on the dark footer that left the
+   violet label at 2.63:1. Transparent pill + light violet: 9.4:1 on #120e22. */
+[data-bs-theme="dark"] .ddl-footer .custom-cta { background: transparent; color: #c2a9ff; }
+[data-bs-theme="dark"] .ddl-footer .custom-cta:hover { background: var(--gold); color: #120e22; }
 .ddl-footer .hand { margin-right: 6px; }
 .site-bio { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--muted); margin: 2px 0 10px; line-height: 1.4; }
 .site-bio .bi { color: var(--violet); flex: none; margin-top: 2px; }
@@ -485,6 +489,14 @@ body {
   .top-bar-brand .tb-title { font-size: 14px; }
   .top-bar-actions { gap: 10px; }
   .top-bar-actions .tb-help .bi + * { display: none; } /* icon-only help on tiny screens */
+  /* tab strip: one horizontally scrollable row instead of wrapping to 3-4 rows.
+     bslib navset_card_tab renders ul#tabs.nav.nav-tabs.card-header-tabs (there
+     is no .navset-card-tab class), so scope to the tabs wrapper. */
+  .main-tabs-wrap .nav-tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .main-tabs-wrap .nav-tabs::-webkit-scrollbar { display: none; }
+  .main-tabs-wrap .nav-tabs > li, .main-tabs-wrap .nav-tabs .nav-item { flex: 0 0 auto; }
+  .main-tabs-wrap .nav-tabs .nav-link { white-space: nowrap; }
 }
 
 /* ---- relocated site-select panel (was the sidebar) -------------------- */
@@ -533,6 +545,9 @@ body {
   .indiv-picker-wrap .ipw-sel, .indiv-picker-wrap .ipw-surprise { flex: 1 1 100%; min-width: 0; }
   .indiv-picker-wrap .ipw-surprise { width: 100%; }
 }
+/* 200% text at 320 px: the selectize row must shrink, not push the page to 411 px */
+.indiv-picker-wrap, .indiv-picker-wrap .selectize-control, .indiv-picker-wrap .selectize-input { max-width: 100%; min-width: 0; }
+.indiv-picker-wrap .selectize-input > * { overflow-wrap: anywhere; }
 
 /* the hero band's change-site + report controls sit inline after the title */
 .hero-title { flex-wrap: wrap; }
@@ -541,6 +556,12 @@ body {
   gap: 4px; min-height: 44px; padding: 8px 10px;
 }
 .hero-title .hero-report { margin-left: 10px; }
+/* the site name is the page h1 once a site loads; keep the old inline <b> look
+   (beats styles.css .hero-site, a sibling-app class with flex + margins) */
+.hero-title h1.hero-site { display: inline; font-size: inherit; font-weight: 700; margin: 0;
+  line-height: inherit; color: inherit; font-family: inherit; letter-spacing: inherit; }
+/* focus target after a load (tabindex=-1): no ring for pointer users */
+#heroStats .hero-band:focus:not(:focus-visible) { outline: none; }
 
 /* ---- Search the network -------------------------------------------------- */
 .search-caption { margin: 4px 0 12px; font-size: 12.5px; line-height: 1.5; }

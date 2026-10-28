@@ -37,6 +37,28 @@ shiny::testServer(server, {
          "the loaded-site hero statistics must render")
   expect(grepl("insight-list", insight_html, fixed = TRUE),
          "the loaded-site insight list must render")
+  expect(grepl("hero-site", hero_html, fixed = TRUE), "the site name must render as the page heading")
+  expect(grepl("week", output$pulseInsight$html, fixed = TRUE), "the pulse headline must name a peak week")
+  expect(grepl("site-qc-tbl", output$siteQcCard$html, fixed = TRUE), "the site data-quality card must render")
+  expect(grepl("codebookCsvAbout", output$aboutPanel$html, fixed = TRUE) &&
+           grepl("Response Atlas", output$aboutPanel$html, fixed = TRUE), "About must carry the codebook and the suite registry")
+  expect(nzchar(output$chaoBanner$html), "the Chao2 banner must render")
+  pdf <- output$reportPdf
+  expect(file.exists(pdf) && identical(readBin(pdf, "raw", 4), charToRaw("%PDF")), "the site report must download as a PDF")
+  session$setInputs(spSel = "Psorophora columbiae")
+  expect(identical(rv$sp, "Psorophora columbiae"), "picking a species must open its profile")
+  session$setInputs(spSel = "")
+  expect(is.null(rv$sp), "clearing the species picker must clear the profile")
+})
+
+# Contract B: a site loaded from the map syncs the by-name selects.
+shiny::testServer(server, {
+  session$setInputs(stateSel = "AZ")
+  session$setInputs(pickSite = "HARV")
+  expect(identical(rv$site, "HARV"), "a map pick must load that site")
+  expect(identical(rv$pendingSite, "HARV"), "a pick in another state must queue the site for the State observer")
+  session$setInputs(pickSite = "../site_index")
+  expect(identical(rv$site, "HARV"), "a non-roster pickSite value must never reach readRDS")
 })
 
 cat("OK: real bundled-site Shiny outputs rendered without error.\n")

@@ -6,6 +6,8 @@
 # set/collect timestamps, and day/night identity. This prevents the daytime and
 # nighttime halves of a bout from collapsing onto one plot/date key.
 
+if (!exists("MOS_RELEASE")) source("R/mos_release.R")
+
 `%||%` <- function(a, b) if (is.null(a) || !length(a)) b else a
 mos_num <- function(x) suppressWarnings(as.numeric(x))
 mos_chr <- function(x) {
@@ -174,7 +176,7 @@ mos_build_effort <- function(trapping, site) {
   effort
 }
 
-mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
+mos_build_bundle <- function(raw, site, release = MOS_RELEASE$release) {
   required_tables <- c("mos_trapping", "mos_sorting", "mos_expertTaxonomistIDProcessed")
   missing_tables <- setdiff(required_tables, names(raw))
   if (length(missing_tables)) stop("raw object missing tables: ", paste(missing_tables, collapse = ", "), call. = FALSE)
@@ -258,18 +260,30 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
   effort$zero_catch <- effort$outcome_status == "zero_catch"
   effort$target_flag_conflict <- effort$target_count > 0 & toupper(substr(effort$targetTaxaPresent, 1L, 1L)) == "N"
 
+  # Rate denominators use resolved effort only: a valid interval whose catch is
+  # still pending, held or unknown adds nothing to the numerator, so counting
+  # its hours as effort would read as a zero catch. Those intervals stay in the
+  # effort table, are counted in meta, and are disclosed in the app.
+  effort$denominator_ok <- effort$valid_effort & effort$outcome_status %in% c("positive_catch", "zero_catch")
+  effort$unavailable_days <- ifelse(effort$valid_effort & !effort$denominator_ok, effort$effort_days, 0)
+
   valid <- effort[effort$valid_effort, , drop = FALSE]
+  resolved <- valid[valid$denominator_ok, , drop = FALSE]
   effort_week <- valid |>
     dplyr::group_by(.data$year, .data$week) |>
-    dplyr::summarise(effort_days = sum(.data$effort_days),
-                     opportunities = dplyr::n(), zero_catches = sum(.data$zero_catch), .groups = "drop")
+    dplyr::summarise(opportunities = sum(.data$denominator_ok),
+                     zero_catches = sum(.data$zero_catch),
+                     unavailable_days = sum(.data$unavailable_days),
+                     effort_days = sum(.data$effort_days[.data$denominator_ok]), .groups = "drop")
   traps <- valid |>
     dplyr::group_by(.data$plotID) |>
     dplyr::summarise(trapID = dplyr::first(.data$trapID), nlcdClass = mos_mode(.data$nlcdClass),
       lat = stats::median(.data$lat, na.rm = TRUE), lng = stats::median(.data$lng, na.rm = TRUE),
       collectDate = suppressWarnings(max(.data$collectDate, na.rm = TRUE)),
-      effort_days = sum(.data$effort_days), trap_nights = sum(.data$effort_days),
-      n_collections = dplyr::n(), zero_catches = sum(.data$zero_catch), .groups = "drop") |>
+      n_collections = sum(.data$denominator_ok), zero_catches = sum(.data$zero_catch),
+      unavailable_days = sum(.data$unavailable_days),
+      trap_nights = sum(.data$effort_days[.data$denominator_ok]),
+      effort_days = sum(.data$effort_days[.data$denominator_ok]), .groups = "drop") |>
     dplyr::mutate(trapkey = .data$plotID)
   years <- sort(unique(valid$year[is.finite(valid$year)]))
   meta <- list(
@@ -277,18 +291,23 @@ mos_build_bundle <- function(raw, site, release = "RELEASE-2026") {
     lat = stats::median(valid$lat, na.rm = TRUE),
     lng = stats::median(valid$lng, na.rm = TRUE),
     years = years,
-    effort_days = sum(valid$effort_days),
-    trap_nights = sum(valid$effort_days),
-    n_occ_attempted = nrow(valid),
+    effort_days = sum(resolved$effort_days),
+    trap_nights = sum(resolved$effort_days),
+    n_occ_attempted = nrow(resolved),
+    n_valid_intervals = nrow(valid),
+    valid_effort_days = sum(valid$effort_days),
+    n_unavailable_outcome = nrow(valid) - nrow(resolved),
+    unavailable_effort_days = sum(valid$unavailable_days),
     n_zero_catch = sum(valid$zero_catch),
     n_invalid_effort = sum(!effort$valid_effort),
     n_held_identifications = nrow(held),
     n_traps = length(unique(valid$plotID)),
     release = release,
-    product = "DP1.10043.001",
-    doi = "10.48443/rmw1-me46",
-    release_generated = "2026-01-23",
-    schema_version = "mosquito-pulse-opportunity-v1",
+    product = MOS_RELEASE$product,
+    doi = MOS_RELEASE$doi,
+    release_generated = MOS_RELEASE$release_generated,
+    data_through = if (nrow(valid)) format(max(valid$collectDate, na.rm = TRUE), "%Y-%m-%d") else NA_character_,
+    schema_version = "mosquito-pulse-opportunity-v2",
     metric_label = "mosquitoes per 24 trap-hours"
   )
   effort <- mos_canonical_order(effort, c("collectTimestamp", "plotID", "nightOrDay", "effort_id"))

@@ -2,6 +2,7 @@
 # Fail-closed verification of opportunity-complete bundles and deploy bytes.
 suppressMessages(library(jsonlite))
 `%||%` <- function(a, b) if (is.null(a) || !length(a)) b else a
+source("R/mos_release.R")
 source("R/site_metadata.R")
 problems <- character(0)
 note <- function(x) problems[[length(problems)+1L]] <<- x
@@ -67,11 +68,11 @@ for (file in files) {
     if (any(!(ob$effort_id %in% valid$effort_id))) note(paste(site,"catch without valid effort"))
     if (any(ob$occ_id != ob$effort_id)) note(paste(site,"incidence key differs from effort key"))
   }
-  if (!identical(as.character(b$meta$release),"RELEASE-2026") ||
-      !identical(as.character(b$meta$product),"DP1.10043.001") ||
-      !identical(as.character(b$meta$doi),"10.48443/rmw1-me46") ||
-      !identical(as.character(b$meta$release_generated),"2026-01-23") ||
-      !identical(as.character(b$meta$schema_version),"mosquito-pulse-opportunity-v1")) note(paste(site,"wrong release identity"))
+  if (!identical(as.character(b$meta$release),MOS_RELEASE$release) ||
+      !identical(as.character(b$meta$product),MOS_RELEASE$product) ||
+      !identical(as.character(b$meta$doi),MOS_RELEASE$doi) ||
+      !identical(as.character(b$meta$release_generated),MOS_RELEASE$release_generated) ||
+      !identical(as.character(b$meta$schema_version),"mosquito-pulse-opportunity-v2")) note(paste(site,"wrong release identity"))
   code <- if ("samplingImpractical" %in% names(er)) tolower(trimws(as.character(er$samplingImpractical))) else rep(NA_character_, nrow(er))
   code[!is.na(code) & !nzchar(code)] <- NA_character_
   unknown <- sort(unique(code[!is.na(code) & !(code %in% c(sampled_codes, impractical_codes))]))
@@ -98,16 +99,34 @@ for (file in files) {
   ids <- nrow(ob) + nrow(b$held_identifications)
   if (ids > 0 && held_effort / ids > 0.01) warn(sprintf("%s %.1f%% of identifications are held for invalid effort (%d of %d)",
     site, 100 * held_effort / ids, held_effort, ids))
-  if (!isTRUE(all.equal(as.numeric(b$meta$effort_days),sum(valid$effort_days)))) note(paste(site,"meta effort mismatch"))
-  if (!identical(as.integer(b$meta$n_occ_attempted),as.integer(nrow(valid)))) note(paste(site,"meta opportunity mismatch"))
-  if (!identical(as.integer(b$meta$n_zero_catch),as.integer(sum(valid$zero_catch)))) note(paste(site,"meta zero mismatch"))
+  # Resolved-effort oracle, rebuilt from the catch rows and NEON's own
+  # targetTaxaPresent flag rather than from outcome_status: an interval enters a
+  # rate denominator only if it has target catch or NEON recorded no target taxa.
   target <- ob[ob$is_target %in% TRUE,,drop=FALSE]
   species <- target[target$is_species %in% TRUE,,drop=FALSE]
+  caught_ids <- unique(as.character(target$effort_id))
+  flag_n <- toupper(substr(as.character(valid$targetTaxaPresent),1,1)) %in% "N"
+  resolved_oracle <- (valid$effort_id %in% caught_ids) | (flag_n & !(valid$effort_id %in% caught_ids))
+  if (!("denominator_ok" %in% names(er)) || !identical(as.logical(valid$denominator_ok), resolved_oracle))
+    note(paste(site,"resolved-effort flag differs from the catch/targetTaxaPresent oracle"))
+  if ("denominator_ok" %in% names(er) && any(er$denominator_ok & !er$valid_effort, na.rm=TRUE)) note(paste(site,"resolved effort outside valid effort"))
+  rs <- valid[resolved_oracle,,drop=FALSE]
+  resolved_days <- sum(rs$effort_days)
+  if (!isTRUE(all.equal(as.numeric(b$meta$effort_days),resolved_days))) note(paste(site,"meta effort mismatch"))
+  if (!identical(as.integer(b$meta$n_occ_attempted),as.integer(nrow(rs)))) note(paste(site,"meta opportunity mismatch"))
+  if (!identical(as.integer(b$meta$n_valid_intervals %||% -1L),as.integer(nrow(valid)))) note(paste(site,"meta valid-interval count mismatch"))
+  if (!isTRUE(all.equal(as.numeric(b$meta$unavailable_effort_days %||% NA),sum(valid$effort_days)-resolved_days))) note(paste(site,"meta unavailable effort mismatch"))
+  if (!identical(as.integer(b$meta$n_zero_catch),as.integer(sum(valid$zero_catch)))) note(paste(site,"meta zero mismatch"))
+  ew <- b$effort_week
+  if (!isTRUE(all.equal(sum(as.numeric(ew$effort_days)),resolved_days))) note(paste(site,"effort_week does not sum to resolved effort"))
+  wk_oracle <- tapply(rs$effort_days, paste(rs$year, rs$week), sum)
+  wk_bundle <- setNames(as.numeric(ew$effort_days), paste(ew$year, ew$week))[names(wk_oracle)]
+  if (length(wk_oracle) && !isTRUE(all.equal(as.numeric(wk_bundle), as.numeric(wk_oracle)))) note(paste(site,"effort_week differs from the per-week resolved-effort oracle"))
   total_target <- sum(as.numeric(target$count),na.rm=TRUE)
-  index_oracle[[site]] <- data.frame(site=site, collections=nrow(valid), effort_days=sum(valid$effort_days),
+  index_oracle[[site]] <- data.frame(site=site, collections=nrow(rs), effort_days=resolved_days,
     zero_catches=sum(valid$zero_catch), individuals=round(total_target),
     taxa=length(unique(species$scientificName)),
-    mos_per_24h=if (sum(valid$effort_days)>0) total_target/sum(valid$effort_days) else NA_real_)
+    mos_per_24h=if (resolved_days>0) total_target/resolved_days else NA_real_)
   totals <- totals + c(nrow(ob)+nrow(er),nrow(er),nrow(valid),sum(valid$zero_catch),nrow(ob),nrow(b$held_identifications))
 }
 
@@ -127,18 +146,18 @@ if (inherits(index,"error") || !is.data.frame(index) || length(setdiff(index_req
 search <- tryCatch(readRDS("data/search_index.rds"), error=function(e)e)
 if (inherits(search,"error") || !is.list(search) || !is.data.frame(search$sites) ||
     !identical(sort(as.character(search$sites$site)),expected) ||
-    !identical(as.character(search$release %||% ""),"RELEASE-2026")) note("search_index roster or release mismatch")
+    !identical(as.character(search$release %||% ""),MOS_RELEASE$release)) note("search_index roster or release mismatch")
 receipt_req <- c("product","release","doi","release_generated","site","trapping_rows","sorting_rows","identification_rows","raw_md5",
                  "available_first_month","available_last_month","available_month_count")
 receipt_ok <- !inherits(receipt,"error") && is.data.frame(receipt) && !length(setdiff(receipt_req,names(receipt)))
 if (receipt_ok) receipt_ok <- identical(sort(as.character(receipt$site)),expected) &&
-  all(!is.na(receipt$release) & receipt$release == "RELEASE-2026") &&
-  all(!is.na(receipt$product) & receipt$product == "DP1.10043.001") &&
-  all(!is.na(receipt$doi) & receipt$doi == "10.48443/rmw1-me46") &&
-  all(!is.na(receipt$release_generated) & receipt$release_generated == "2026-01-23") &&
+  all(!is.na(receipt$release) & receipt$release == MOS_RELEASE$release) &&
+  all(!is.na(receipt$product) & receipt$product == MOS_RELEASE$product) &&
+  all(!is.na(receipt$doi) & receipt$doi == MOS_RELEASE$doi) &&
+  all(!is.na(receipt$release_generated) & receipt$release_generated == MOS_RELEASE$release_generated) &&
   all(!is.na(receipt$raw_md5) & grepl("^[0-9a-f]{32}$",tolower(receipt$raw_md5))) &&
   all(is.finite(receipt$trapping_rows) & receipt$trapping_rows > 0)
-if (!receipt_ok) note("source receipt is missing or not exact RELEASE-2026")
+if (!receipt_ok) note(paste("source receipt is missing or not exact", MOS_RELEASE$release))
 for (path in c("data/cross_site.rds","data/search_index.rds","data/site_climate.rds","data/site_month_clim.rds"))
   if (!file.exists(path)) note(paste("missing derived index",path))
 

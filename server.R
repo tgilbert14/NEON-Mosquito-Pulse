@@ -21,30 +21,49 @@ server <- function(input, output, session) {
       annotations=list(list(text=paste0(icon,"<br>",msg), showarrow=FALSE, font=list(color=if(is_dark())"#9b91c0" else "#6f6790", size=15), align="center"))) %>%
     plotly::config(displayModeBar = FALSE)
 
-  rv <- reactiveValues(obs=NULL, effort=NULL, traps=NULL, board=NULL, tn=0, nocc=0, effw=NULL, label=NULL, site=NULL, sp=NULL, ctx=NULL, is_demo=FALSE, grid=NULL)
+  rv <- reactiveValues(obs=NULL, effort=NULL, traps=NULL, board=NULL, tn=0, nocc=0, effw=NULL, label=NULL, site=NULL, sp=NULL, ctx=NULL, is_demo=FALSE, grid=NULL,
+                       meta=NULL, held=NULL, pendingSite=NULL)
+
+  # "One collection (sample, date, taxon) is N% of this catch; ..." with any
+  # missing part left out.
+  top_record_note <- function(sv) {
+    parts <- c(sv$top_sample, if (!is.na(sv$top_date)) format(sv$top_date, "%d %b %Y") else NA_character_, sv$top_taxon)
+    parts <- parts[!is.na(parts) & nzchar(parts)]
+    sprintf("One collection%s is %d%% of this catch; without it the index is %s.",
+            if (length(parts)) paste0(" (", paste(parts, collapse = ", "), ")") else "",
+            as.integer(sv$top_share), format(sv$index_excl_top, nsmall = 2))
+  }
+
+  # "because no species / only 1 species / only N species turned up exactly twice"
+  q2_phrase <- function(q2) if (q2 == 0) "no species" else sprintf("only %d species", q2)
+  number_word <- function(n) if (n >= 1 && n <= 12) c("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
+    "Nine", "Ten", "Eleven", "Twelve")[n] else as.character(n)
 
   observe({ ch <- mos_state_choices(); updateSelectInput(session, "stateSel", choices = ch, selected = if ("AZ" %in% ch) "AZ" else NULL) })
-  observeEvent(input$stateSel, updateSelectInput(session, "site", choices = mos_sites_in_state(input$stateSel)), ignoreInit = FALSE)
+  observeEvent(input$stateSel, {
+    sites <- mos_sites_in_state(input$stateSel)
+    sel <- if (!is.null(rv$pendingSite) && rv$pendingSite %in% sites) rv$pendingSite else unname(sites)[1]
+    rv$pendingSite <- NULL
+    updateSelectInput(session, "site", choices = sites, selected = sel)
+  }, ignoreInit = FALSE)
   output$siteBio <- renderUI({ req(input$site); b <- site_bio(input$site); if (is.null(b)) return(NULL); div(class="site-bio", bs_icon("info-circle-fill"), span(b)) })
   output$siteCards <- renderUI({
     if (is.null(SITE_INDEX) || !nrow(site_table)) return(NULL)
     div(class="site-cards", lapply(seq_len(nrow(site_table)), function(i){ r <- site_table[i,]
       tags$a(class="site-card", href="#",
-        onclick=sprintf("smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;", gsub("'","",r$name), r$site),
+        onclick=sprintf("smtLoadStart(%s);Shiny.setInputValue('pickSite',%s,{priority:'event'});return false;", js_str(paste0(r$name, " · loading…")), js_str(r$site)),
         div(class="sc-emoji","\U0001F99F"),
         div(class="sc-body", div(class="sc-name", tags$b(r$site), sprintf(" · %s", r$name)),
-          div(class="sc-meta", sprintf("%s · %s species · %s / 24 trap-hours", r$state, r$taxa %||% "—", r$mos_per_24h %||% "—")))) }))
+          div(class="sc-meta", sprintf("%s · %s species · %s / 24 trap-hours", r$state, r$taxa %||% "n/a", r$mos_per_24h %||% "n/a")))) }))
   })
-  shinyjs::hide("mainTabsWrap")
-
   ingest <- function(b, label, is_demo = FALSE) {
     if (is.null(b) || is.null(b$effort) || !any(b$effort$valid_effort %in% TRUE)) {
       session$sendCustomMessage("loadDone", list())   # dismiss the overlay immediately; never wait on the 90s timer
-      showNotification(HTML("No validated mosquito release is bundled. Run the reviewed RELEASE-2026 refresh workflow before deployment."),
+      showNotification(HTML("No validated mosquito release is bundled. Run the reviewed refresh workflow before deployment."),
                        type = "error", duration = 12)
       return(invisible())
     }
-    rv$obs <- b$obs; rv$effort <- b$effort; rv$traps <- b$traps
+    rv$obs <- b$obs; rv$effort <- b$effort; rv$traps <- b$traps; rv$meta <- b$meta; rv$held <- b$held_identifications
     rv$tn <- b$meta$effort_days %||% b$meta$trap_nights %||% (if (!is.null(b$traps$effort_days)) sum(b$traps$effort_days, na.rm = TRUE) else NA_real_)
     rv$nocc <- b$meta$n_occ_attempted %||% sum(b$effort$valid_effort %in% TRUE)
     rv$effw <- b$effort_week
@@ -54,31 +73,70 @@ server <- function(input, output, session) {
     shinyjs::show("mainTabsWrap"); shinyjs::show("spPickerWrap"); shinyjs::hide("splash")
     ch <- if (is.null(rv$board)) character(0) else setNames(rv$board$scientificName, sprintf("%s · %s", rv$board$scientificName, rv$board$genus))
     updateSelectizeInput(session, "spSel", choices = c("Pick a species…"="", ch), selected = "", server = TRUE)
-    nav_select("tabs", "overview"); session$sendCustomMessage("countUp", list()); session$sendCustomMessage("loadDone", list())
+    nav_select("tabs", "overview"); session$sendCustomMessage("countUp", list()); session$sendCustomMessage("loadDone", list(ok = TRUE))
     invisible(TRUE)
   }
-  load_site <- function(site){ if (is.null(site)||site=="") { session$sendCustomMessage("loadDone", list()); return() }
-    b <- load_site_bundle(site); if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That site isn't bundled.", type="error"); return() }
-    row <- site_table[site_table$site==site,]; ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site)) }
+  # Every load path (map popup, browse list, search, by-name select, URL) goes
+  # through load_site(). Only a bundled site code reaches readRDS(), and a
+  # successful load syncs the State/Site selects and the ?site= URL.
+  load_site <- function(site, from_url = FALSE){
+    site <- toupper(as.character(site %||% "")[1])
+    if (is.na(site) || !nzchar(site) || !(site %in% site_table$site)) {
+      session$sendCustomMessage("loadDone", list())
+      if (!is.na(site) && nzchar(site)) showNotification("That site isn't bundled.", type="error")
+      return(invisible(FALSE)) }
+    b <- load_site_bundle(site); if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That site isn't bundled.", type="error"); return(invisible(FALSE)) }
+    row <- site_table[site_table$site==site,]
+    if (!isTRUE(ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site)))) return(invisible(FALSE))
+    st <- if (nrow(row)) row$state[1] else NA_character_
+    if (!is.na(st)) {
+      if (identical(input$stateSel, st)) updateSelectInput(session, "site", selected = site)
+      else { rv$pendingSite <- site; updateSelectInput(session, "stateSel", selected = st) }
+    }
+    updateQueryString(paste0("?site=", site), mode = if (from_url) "replace" else "push")
+    invisible(TRUE) }
   observeEvent(input$loadBtn, load_site(input$site)); observeEvent(input$pickSite, load_site(input$pickSite))
+  # Deep links and browser back/forward: ?site=XXXX loads that site; an empty
+  # query returns to the picker.
+  url_seen <- FALSE
+  observeEvent(session$clientData$url_search, {
+    q <- tryCatch(parseQueryString(session$clientData$url_search %||% ""), error = function(e) list())
+    want <- toupper(q$site %||% "")
+    first <- !url_seen; url_seen <<- TRUE
+    if (nzchar(want) && want %in% site_table$site) { if (!identical(want, rv$site)) load_site(want, from_url = TRUE) }
+    else if (!first && !nzchar(want) && !is.null(rv$site)) reset_to_picker()   # back to a bare URL
+  }, ignoreInit = FALSE)
+  observeEvent(input$siteInfo, {
+    code <- toupper(as.character(input$siteInfo %||% "")); req(code %in% site_table$site)
+    row <- site_table[site_table$site == code, ]; bio <- site_bio(code)
+    showModal(modalDialog(easyClose = TRUE, title = sprintf("%s · %s", code, row$name[1]),
+      if (!is.null(bio)) p(bio),
+      p(sprintf("%s · %s species caught · %s mosquitoes per 24 trap-hours", row$state[1], row$taxa[1] %||% "n/a", if (is.finite(row$mos_per_24h[1] %||% NA)) format(round(row$mos_per_24h[1], 2), nsmall = 2) else "n/a")),
+      footer = tagList(modalButton("Close"),
+        actionButton("siteInfoLoad", tagList(bs_icon("arrow-right-circle"), " Explore this site"), class = "btn-primary",
+          onclick = sprintf("smtLoadStart(%s)", js_str(paste0(row$name[1], " · loading…")))))))
+    rv$infoSite <- code
+  })
+  observeEvent(input$siteInfoLoad, { removeModal(); load_site(rv$infoSite) })
   # v2 flow: the Santa Rita demo path was removed — users pick a real site on the
   # map, the Browse-all list, or the by-name select panel. The demoBtn / demoBtn2
   # inputs and their observers are gone with it.
 
   # "Change site" (in the hero band) -> back to the picker-map landing
-  observeEvent(input$changeSite, {
+  reset_to_picker <- function() {
     rv$obs <- NULL; rv$effort <- NULL; rv$traps <- NULL; rv$board <- NULL; rv$tn <- 0; rv$nocc <- 0
-    rv$effw <- NULL; rv$label <- NULL; rv$site <- NULL; rv$sp <- NULL; rv$grid <- NULL
+    rv$effw <- NULL; rv$label <- NULL; rv$site <- NULL; rv$sp <- NULL; rv$grid <- NULL; rv$meta <- NULL; rv$held <- NULL
     shinyjs::hide("mainTabsWrap"); shinyjs::hide("spPickerWrap"); shinyjs::show("splash")
     # the picker map was hidden while a site was loaded; nudge it to recompute
     # size now that it's visible again, so it never paints blank/grey on return
     session$sendCustomMessage("kickMaps", list())
-  })
+  }
+  observeEvent(input$changeSite, { reset_to_picker(); updateQueryString("?", mode = "push") })
 
   pick_species <- function(sci, navigate=FALSE){ if (is.null(sci)||is.na(sci)||sci=="") return()
     if (is.null(rv$board) || !(sci %in% rv$board$scientificName)) return()
     rv$sp <- sci; if (!identical(input$spSel, sci)) updateSelectizeInput(session, "spSel", selected=sci); if (navigate) nav_select("tabs","species") }
-  observeEvent(input$spSel, if (nzchar(input$spSel %||% "")) pick_species(input$spSel, navigate=TRUE), ignoreInit=TRUE)
+  observeEvent(input$spSel, if (nzchar(input$spSel %||% "")) pick_species(input$spSel, navigate=TRUE) else rv$sp <- NULL, ignoreInit=TRUE)
   observeEvent(input$qcCardRequest, if (nzchar(input$qcCardRequest %||% "")) pick_species(input$qcCardRequest, navigate=TRUE), ignoreInit=TRUE)
   observeEvent(input$surpriseBtn, { req(rv$board); pick_species(sample(rv$board$scientificName, 1), navigate=TRUE) })
   observeEvent(input$goPulse, nav_select("tabs","pulse")); observeEvent(input$goBoard, nav_select("tabs","board"))
@@ -92,8 +150,8 @@ server <- function(input, output, session) {
   # SAME pickSite input the picker map uses, so the row loads from the bundle
   # and lands on Overview, identical to every other site jump.
   go_cell <- function(site) sprintf(
-    "<a href='#' class='search-go' onclick=\"smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;\">\U0001F99F Go to site &rarr;</a>",
-    site, site)
+    "<a href='#' class='search-go' onclick=\"smtLoadStart(%s);Shiny.setInputValue('pickSite',%s,{priority:'event'});return false;\">\U0001F99F Go to site &rarr;</a>",
+    htmltools::htmlEscape(js_str(paste0(site, " · loading…")), attribute = TRUE), htmltools::htmlEscape(js_str(site), attribute = TRUE))
   dt_opts <- list(pageLength = 12, dom = "tip", scrollX = TRUE, columnDefs = list(list(className = "dt-body-right", targets = "_all")))
 
   # populate the taxon autocomplete from the index, Culex flagged
@@ -127,10 +185,10 @@ server <- function(input, output, session) {
       `Ubiquity (%)` = d$ubiquity,
       `Total caught` = d$total,
       Years = ifelse(is.finite(d$year_min) & d$year_min == d$year_max, as.character(d$year_min),
-                     paste0(d$year_min, "–", d$year_max)),
+                     paste0(d$year_min, " to ", d$year_max)),
       ` ` = vapply(d$site, go_cell, character(1)),
       check.names = FALSE, stringsAsFactors = FALSE)
-    DT::datatable(out, escape = FALSE, rownames = FALSE, selection = "none", options = dt_opts) %>%
+    DT::datatable(out, escape = -which(names(out) == " "), rownames = FALSE, selection = "none", options = dt_opts) %>%
       DT::formatRound("Activity index (per 24 trap-hours)", 3)
   })
 
@@ -161,7 +219,7 @@ server <- function(input, output, session) {
       Species = s$taxa, `Effort (24-hour units)` = s$effort_days,
       ` ` = vapply(s$site, go_cell, character(1)),
       check.names = FALSE, stringsAsFactors = FALSE)
-    DT::datatable(out, escape = FALSE, rownames = FALSE, selection = "none", options = dt_opts)
+    DT::datatable(out, escape = -which(names(out) == " "), rownames = FALSE, selection = "none", options = dt_opts)
   })
 
   # ---- hero ----
@@ -172,19 +230,28 @@ server <- function(input, output, session) {
       div(class="hs-icon", bs_icon(icon)),
       div(div(class="hs-v count-up", `data-target`=v, `data-suffix`=suf, "0"),
           div(class="hs-l", l, if (!is.null(info)) info)))
+    m <- rv$meta %||% list()
+    valid_days <- m$valid_effort_days %||% sv$effort_days
+    unavail_n <- m$n_unavailable_outcome %||% 0L
+    dom_note <- if (is.finite(sv$top_share %||% NA) && sv$top_share >= 25)
+      p(class = "hero-note", top_record_note(sv))
     div(class="hero-band",
-      div(class="hero-title", bs_icon("broadcast"), tags$b(rv$label),
+      div(class="hero-title", bs_icon("broadcast"), tags$h1(class = "hero-site", rv$label),
         actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " change site"), class = "hero-change"),
-        downloadLink("reportCsv", tagList(bs_icon("file-earmark-arrow-down"), " report"), class = "hero-report")),
+        downloadLink("reportPdf", tagList(bs_icon("file-earmark-pdf"), " report (PDF)"), class = "hero-report"),
+        downloadLink("reportCsv", tagList(bs_icon("filetype-csv"), " summary (CSV)"), class = "hero-report")),
       div(class="hero-grid",
         hero(sv$n_taxa, "species", icon="bug-fill", tone="navy",
           info=info_pop("Species", p("The number of different mosquito species ", tags$b("caught"), " here across all years. CO2 traps miss day-active and rare species, so the true total is higher (see the Chao2 estimate)."))),
         hero(sv$index, "per 24 trap-hours", icon="activity", tone="terra",
           info=info_pop("Activity index", p("Whole-trap-scaled mosquitoes per ", tags$b("24 trap-hours"), ", a within-site ", tags$b("activity index, not a population"), ". Weather, lure response, and trap encounter all affect it."))),
-        hero(sv$pct_female, "% female", suf="%", icon="gender-female", tone="pine",
-          info=info_pop("Female share", p("Share of sexed mosquitoes that were female. CO2 traps ", tags$b("select for host-seeking females"), " by design, so a near-all-female catch is the trap working, not a real sex ratio. Males show up mostly as bycatch."))),
-        hero(sv$effort_days, "24h effort units", icon="clock-history", tone="gold",
-          info=info_pop("Sampling effort", p("Total valid effort as ", tags$b("trapHours ÷ 24"), ". Day and night intervals remain separate opportunities even when they share a date.")))))
+        hero(sv$pct_female, "female", suf="%", icon="gender-female", tone="pine",
+          info=info_pop("Female share", p("Share of sexed mosquitoes that were female. CO2 traps ", tags$b("select for host-seeking females"), " by design, so a near-all-female catch is the trap working, not a real sex ratio. Males are caught only incidentally."))),
+        hero(round(valid_days, 1), "24h effort units", icon="clock-history", tone="gold",
+          info=info_pop("Sampling effort", p("Sampled effort as ", tags$b("trapHours ÷ 24"), ". Day and night intervals remain separate opportunities even when they share a date."),
+            if (unavail_n > 0) p(sprintf("%s of these intervals (%s units) still have a pending, held or unknown catch, so the activity index and the species charts leave them out rather than count them as zero.",
+              fmt_int(unavail_n), fmt_int(m$unavailable_effort_days %||% 0)))))),
+      dom_note)
   })
 
   # ---- Overview ----
@@ -204,15 +271,18 @@ server <- function(input, output, session) {
     if (is.null(brd) || !nrow(brd)) return(insight_banner("circle", tone="navy",
       HTML("NEON recorded valid trap effort here but <b>no eligible target mosquitoes</b>. Supported zero catches stay zero; missed, unknown, and held outcomes are not added to that claim.")))
     top <- brd[which.max(brd$index),]; ubi <- brd[which.max(brd$ubiquity),]
-    insight_banner("activity", tone="navy", HTML(sprintf("<b>%s</b> is the most-active mosquito here (%.2f per 24 trap-hours); <b>%s</b> is the most widespread (on %.0f%% of sampled intervals). The site holds <span class='ci-hero'>%d</span> species.",
-      top$vernacular %||% top$scientificName, top$index, ubi$vernacular %||% ubi$scientificName, ubi$ubiquity, nrow(brd))))
+    sv <- site_vectors(rv$obs, rv$nocc, rv$tn, rv$effw)
+    coarse <- if (!is.null(sv) && is.finite(sv$coarse_share %||% NA) && sv$coarse_share >= 0.05)
+      sprintf(" %.0f%% of the catch was identified only to genus or family; it is in the site index but not on this species chart.", 100 * sv$coarse_share) else ""
+    insight_banner("activity", tone="navy", HTML(sprintf("<b>%s</b> is the most-active mosquito here (%.2f per 24 trap-hours); <b>%s</b> is the most widespread (on %.0f%% of sampled intervals). The site holds <span class='ci-hero'>%d</span> species.%s",
+      htmltools::htmlEscape(top$vernacular %||% top$scientificName), top$index, htmltools::htmlEscape(ubi$vernacular %||% ubi$scientificName), ubi$ubiquity, nrow(brd), coarse)))
   })
   output$siteInsights <- renderUI({
     req(!is.null(rv$obs), !is.null(rv$effort))
     brd <- rv$board
     if (is.null(brd) || !nrow(brd)) {
       valid <- rv$effort[rv$effort$valid_effort %in% TRUE,,drop=FALSE]
-      yrs <- range(valid$year,na.rm=TRUE); yr_lab <- if (yrs[1]==yrs[2]) as.character(yrs[1]) else sprintf("%d–%d",yrs[1],yrs[2])
+      yrs <- range(valid$year,na.rm=TRUE); yr_lab <- if (yrs[1]==yrs[2]) as.character(yrs[1]) else sprintf("%d to %d",yrs[1],yrs[2])
       pts <- c(
         sprintf("Across <b>%s</b>, NEON recorded <b>%s</b> valid day/night trap intervals and <b>%s</b> 24-hour effort units here.",yr_lab,fmt_int(nrow(valid)),fmt_int(sum(valid$effort_days))),
         sprintf("Of those intervals, <b>%s</b> are supported zero catches (<code>targetTaxaPresent = N</code>). Unknown, unusable, held, and missed outcomes remain separate.",fmt_int(sum(valid$zero_catch))),
@@ -220,21 +290,23 @@ server <- function(input, output, session) {
       return(tags$ul(class="insight-list",lapply(pts,function(t) tags$li(HTML(t)))))
     }
     ch <- chao2_collections(rv$obs, rv$nocc)
-    yrs <- range(rv$obs$year, na.rm=TRUE); yr_lab <- if (yrs[1]==yrs[2]) as.character(yrs[1]) else sprintf("%d–%d", yrs[1], yrs[2])
+    yrs <- range(rv$meta$years %||% rv$obs$year, na.rm=TRUE); yr_lab <- if (yrs[1]==yrs[2]) as.character(yrs[1]) else sprintf("%d to %d", yrs[1], yrs[2])
     top <- brd[which.max(brd$index),]; ubi <- brd[which.max(brd$ubiquity),]
     nm <- function(r) r$vernacular %||% r$scientificName
     gs <- genus_share(rv$obs); culex <- if (!is.null(gs)) gs$share[gs$genus=="Culex"] else NA
     pts <- c(
-      sprintf("Over <b>%s</b>, NEON recorded about <b>%s</b> 24-hour units of valid trap effort here and an estimated <b>%s</b> mosquitoes from <b>%d</b> identified species.",
+      sprintf("Over <b>%s</b>, NEON recorded about <b>%s</b> 24-hour units of trap effort with a known catch here and an estimated <b>%s</b> mosquitoes from <b>%d</b> identified species.",
         yr_lab, fmt_int(rv$tn), fmt_int(sum(brd$total)), nrow(brd)),
       sprintf("The most-active mosquito is <b><i>%s</i></b>, about <b>%.2f</b> per 24 trap-hours; the most <i>widespread</i> is <b><i>%s</i></b>, on <b>%.0f%%</b> of sampled intervals.",
-        top$scientificName, top$index, ubi$scientificName, ubi$ubiquity))
+        htmltools::htmlEscape(top$scientificName), top$index, htmltools::htmlEscape(ubi$scientificName), ubi$ubiquity))
     if (length(culex) && !is.na(culex) && culex > 0)
       pts <- c(pts, sprintf("<b>Culex</b> makes up about <b>%.0f%%</b> of the catch here. Some species in this genus are important vectors, but this catch product does not test for a pathogen or measure health risk.", culex))
     if (!is.null(ch)) {
       cov <- site_coverage(rv$obs, rv$nocc)
+      ci_ok <- is.finite(ch$ci_lo) && is.finite(ch$ci_hi)
       if (ch$unstable && is.finite(cov))
-        pts <- c(pts, sprintf("Traps caught <b>%d</b> species, and sample <b>coverage is %.0f%%</b>, so most species present were caught. (A Chao2 extrapolation is unstable here; read the completeness, not a single projected number.)", ch$S_obs, round(100 * cov)))
+        pts <- c(pts, if (ci_ok) sprintf("Traps caught <b>%d</b> species. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found, so the ones still missing are rare in these traps. Chao2 puts the total at <b>%.0f to %.0f</b> species, a wide range because %s turned up exactly twice.", ch$S_obs, round(100 * cov), ch$ci_lo, ch$ci_hi, q2_phrase(ch$Q2))
+          else sprintf("Traps caught <b>%d</b> species. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found. Chao2 gives about <b>%.0f</b>, a volatile estimate because %s turned up exactly twice.", ch$S_obs, round(100 * cov), ch$chao2, q2_phrase(ch$Q2)))
       else
         pts <- c(pts, sprintf("Traps caught <b>%d</b> species; <b>Chao2</b> (across %s sampled intervals) estimates at least <b>%.0f</b> really use the site. CO2 traps miss day-active and rare mosquitoes.", ch$S_obs, fmt_int(ch$m), ch$chao2))
     }
@@ -259,7 +331,8 @@ server <- function(input, output, session) {
         name = lab, legendgroup="s", showlegend = FALSE, marker=list(color=sex_col(sx$sex[i])),
         hovertemplate=sprintf("%s · %.1f%% of all catch<extra></extra>", lab, sx$share[i])) }
     p %>% plotly_theme() %>% plotly::layout(barmode="stack", showlegend=TRUE,
-      xaxis=list(title="% of catch", ticksuffix="%", range=c(0,100)), yaxis=list(title=""), margin=list(l=70, t=20, b=40))
+      legend=list(orientation="h", x=0, y=-0.35, yanchor="top"),
+      xaxis=list(title="", ticksuffix="%", range=c(0,100)), yaxis=list(title=""), margin=list(l=70, t=20, b=70))
   })
   output$compInsight <- renderUI({
     req(!is.null(rv$obs)); gs <- genus_share(rv$obs); sx <- sex_split(rv$obs)
@@ -269,9 +342,32 @@ server <- function(input, output, session) {
     femp <- if (f + m > 0) round(100 * f / (f + m)) else NA_real_           # of SEXED — same denominator as the hero badge
     pct_u <- round(100 * u / max(1, f + m + u))
     insight_banner("pie-chart", tone="terra", HTML(sprintf("The catch is <b>%.0f%%</b> %s, and <span class='ci-hero'>%s%% of the sexed mosquitoes are female</span>%s. Female-heavy is the CO2 trap doing its job, not a population sex ratio.",
-      gs$share[1], gs$genus[1], ifelse(is.na(femp), "—", as.character(femp)),
+      gs$share[1], htmltools::htmlEscape(gs$genus[1]), ifelse(is.na(femp), "n/a", as.character(femp)),
       if (pct_u >= 20) sprintf(" (%d%% of the catch was left unsexed)", pct_u) else "")))
   })
+
+  # ---- Site-level data quality (Overview) ----
+  site_qc_r <- reactive({ req(!is.null(rv$obs)); site_qc(rv$obs, rv$effort, rv$held, rv$meta) })
+  output$siteQcCard <- renderUI({
+    q <- site_qc_r(); req(!is.null(q))
+    r <- q$rows
+    tagList(
+      tags$table(class = "inspect-tbl site-qc-tbl",
+        tags$thead(tags$tr(tags$th("Check"), tags$th(class = "grid-num", "Count"), tags$th("What it means"))),
+        tags$tbody(lapply(seq_len(nrow(r)), function(i) tags$tr(
+          tags$td(r$check[i]), tags$td(class = "grid-num", fmt_int(r$n[i])), tags$td(r$detail[i]))))),
+      div(class = "sizelab-toolbar",
+        downloadButton("siteQcCsv", "Site data-quality summary (CSV)", class = "smt-clear-btn"),
+        if (!is.null(q$held) && nrow(q$held)) downloadButton("heldCsv", "Held identifications (CSV)", class = "smt-clear-btn")))
+  })
+  output$siteQcCsv <- downloadHandler(
+    filename = function() sprintf("NEON-Mosquito_site-QC_%s_%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) { q <- site_qc_r(); utils::write.csv(cbind(site = rv$site %||% NA_character_, q$rows), file, row.names = FALSE, na = "") },
+    contentType = "text/csv")
+  output$heldCsv <- downloadHandler(
+    filename = function() sprintf("NEON-Mosquito_held-identifications_%s_%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) { h <- rv$held; req(!is.null(h)); utils::write.csv(cbind(site = rv$site %||% NA_character_, as.data.frame(h)), file, row.names = FALSE, na = "") },
+    contentType = "text/csv")
 
   # ---- The Pulse (signature) ----
   output$pulsePlot <- renderPlotly({
@@ -282,9 +378,9 @@ server <- function(input, output, session) {
     band_fill <- if (is_dark()) "rgba(149,118,255,0.26)" else "rgba(124,82,224,0.14)"   # brighten on the dark surface so the IQR/monsoon bands don't vanish
     mons_fill <- if (is_dark()) "rgba(120,200,40,0.22)"  else "rgba(95,158,18,0.14)"
     p <- plot_ly()
-    # band = the middle 50% of years (inter-quartile spread around the median line)
-    if (any(pk$se > 0)) p <- p %>%
-      add_trace(x=c(pk$week, rev(pk$week)), y=c(pk$index+pk$se, rev(pk$index-pk$se)), type="scatter", mode="lines",
+    # band = the middle 50% of years (25th to 75th percentile across years)
+    if (any(pk$q75 > pk$q25)) p <- p %>%
+      add_trace(x=c(pk$week, rev(pk$week)), y=c(pk$q75, rev(pk$q25)), type="scatter", mode="lines",
         fill="toself", fillcolor=band_fill, line=list(width=0), name="middle 50% of years", hoverinfo="skip", showlegend=FALSE)
     p <- p %>% add_trace(x=~pk$week, y=~pk$index, type="scatter", mode="lines+markers", name="Activity (median)",
       line=list(color=DDL$violet, width=3), marker=list(color=DDL$violet, size=6),
@@ -306,12 +402,22 @@ server <- function(input, output, session) {
   })
   output$pulseInsight <- renderUI({
     req(!is.null(rv$obs)); pk <- pulse_phenology(rv$obs, rv$effw); req(!is.null(pk), nrow(pk) >= 2)
-    if (!any(pk$index > 0,na.rm=TRUE)) return(insight_banner("circle", tone="navy",
-      HTML("Valid trapping weeks are shown at <b>zero activity</b>. No target mosquitoes were detected, so this explorer does not estimate a seasonal peak.")))
-    pw <- pk$week[which.max(pk$index)]; pm <- format(as.Date("2021-01-01") + (pw*7 - 7), "%B")
+    if (!any(pk$index > 0,na.rm=TRUE)) {
+      any_catch <- isTRUE(sum(num(target_only(rv$obs)$count), na.rm = TRUE) > 0)
+      return(insight_banner("circle", tone="navy", HTML(if (any_catch)
+        "No week has a non-zero median across the years it was trapped, so this explorer does not name a seasonal peak."
+        else "Valid trapping weeks are shown at <b>zero activity</b>. No target mosquitoes were detected, so this explorer does not estimate a seasonal peak.")))
+    }
+    pkk <- pulse_peak(pk, rv$obs)
     cl <- if (!is.null(SITE_CLIMATE)) SITE_CLIMATE[SITE_CLIMATE$site == rv$site, , drop = FALSE] else NULL
     reg <- precip_regime(cl); desert <- identical(biome_of(rv$site), "desert")
-    head_txt <- sprintf("Activity peaks around <b>week %d (%s)</b>. ", pw, pm)
+    head_txt <- sprintf("Activity %s around <b>week %d (%s)</b>, %s. ", if (isTRUE(pkk$years_total == 1)) "peaked" else "peaks",
+      pkk$week, pkk$month_label, peak_support_text(pkk))
+    yrs <- rv$meta$years %||% integer(0)
+    era_txt <- paste0(
+      if (length(yrs) && min(yrs) < 2018 && max(yrs) >= 2018) " Two trapping designs are pooled here: from 2018 each bout has one night instead of two." else "",
+      if (length(yrs) && max(yrs) >= 2024) " From 2024 NEON baited the traps with CO2 canisters instead of dry ice." else "",
+      if (identical(rv$site, "PUUM") && max(yrs) >= 2022) " At PUUM canisters replaced dry ice in mid-2022." else "")
     body <- if (reg == "monsoon")
       "The activity peak overlaps this site's <b>summer-monsoon window</b>, a descriptive pattern consistent with rain-created habitat and emergence timing; it does not show that rain caused the peak."
     else if (reg == "summer_rain")
@@ -320,9 +426,9 @@ server <- function(input, output, session) {
       "This is a desert site, but <b>there is no supported NEON rain overlay here</b>, so the chart does not place activity against a local rain window."
     else
       "This cooler-site pattern is shown beside seasonal warmth, but the observational series does not establish a thermal cause."
-    insight_banner("activity", tone="navy", HTML(paste0(head_txt, body)))
+    insight_banner("activity", tone="navy", HTML(paste0(head_txt, body, era_txt)))
   })
-  # the signature weekly pulse, as a tidy CSV (one row per ISO week)
+  # the signature weekly pulse, as a tidy CSV (one row per week of year, Sunday start)
   output$pulseCsv <- downloadHandler(
     filename = function() sprintf("NEON-Mosquito_pulse_%s_%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
@@ -332,7 +438,7 @@ server <- function(input, output, session) {
       mlo <- if (!is.null(cl) && nrow(cl)) cl$monsoon_month_min[1] else NA
       mhi <- if (!is.null(cl) && nrow(cl)) cl$monsoon_month_max[1] else NA
       out <- data.frame(site = rv$site %||% NA_character_, week = pk$week,
-                        index_median = round(pk$index, 3), iqr = round(2 * pk$se, 3),
+                        index_median = round(pk$index, 3), q25 = round(pk$q25, 3), q75 = round(pk$q75, 3),
                         n_years = pk$n_years, monsoon_month_min = mlo, monsoon_month_max = mhi)
       utils::write.csv(out, file, row.names = FALSE, na = "") },
     contentType = "text/csv")
@@ -353,25 +459,39 @@ server <- function(input, output, session) {
     ac <- accum(); req(!is.null(ac))
     if (!any(ac$richness > 0)) return(insight_banner("circle", tone="pine",
       HTML(sprintf("Across <b>%d sampled intervals</b>, no eligible mosquito species accumulated. Supported sampled zeros remain visible; this does not prove mosquitoes were absent outside the trap method.",nrow(ac)))))
-    slope <- ac$richness[nrow(ac)] - ac$richness[max(1,nrow(ac)-5)]
+    si <- site_incidence(rv$obs, rv$nocc)
+    gain <- if (is.null(si)) NA_real_ else length(si$Y) - rarefy_incidence(si$Y, si$T, floor(0.9 * si$T))
+    cov <- site_coverage(rv$obs, rv$nocc)
+    rising <- is.finite(gain) && (gain >= 1 || (is.finite(cov) && cov < 0.95))
     insight_banner("graph-up", tone="pine", HTML(sprintf("By <b>%d</b> sampled intervals, <span class='ci-hero'>%.0f</span> species had turned up.%s",
-      ac$occasions[nrow(ac)], ac$richness[nrow(ac)], if (slope > 1) " The curve is still rising; more trapping would find more species." else " The curve is flattening; most catchable species have been found.")))
+      ac$occasions[nrow(ac)], ac$richness[nrow(ac)],
+      if (rising) sprintf(" The last tenth of trapping added about %.0f new species, so more trapping would likely find more.", gain)
+      else " The last tenth of trapping added under one new species.")))
   })
   output$chaoBanner <- renderUI({
     ch <- chao2_collections(rv$obs, rv$nocc)
     if (is.null(ch)) return(insight_banner("circle", tone="gold",
       "Species-richness extrapolation is unavailable because no eligible species incidence was observed."))
     cov <- site_coverage(rv$obs, rv$nocc)
-    ci_txt <- if (is.finite(ch$ci_lo) && is.finite(ch$ci_hi)) sprintf("%.0f–%.0f species", ch$ci_lo, ch$ci_hi) else "wide"
+    ci_txt <- if (is.finite(ch$ci_lo) && is.finite(ch$ci_hi)) {
+      if (round(ch$ci_lo) == round(ch$ci_hi)) sprintf("%.0f species", ch$ci_lo) else sprintf("%.0f to %.0f species", ch$ci_lo, ch$ci_hi)
+    } else "wide"
+    uncaught <- max(0, round(ch$chao2 - ch$S_obs))
     chao_pop <- info_pop("Chao2 estimate",
-      p(tags$b("Chao2"), " estimates ", tags$b(sprintf("%.0f", ch$chao2)), " species use the site (95% CI ", tags$b(ci_txt), "; Chao 1987), so roughly ", tags$b(sprintf("%.0f", max(0, round(ch$chao2 - ch$S_obs)))), " remain uncaught."),
+      if (uncaught == 0) p(tags$b("Chao2"), sprintf(" (Chao 1987) finds no sign of species the traps are missing: %s.",
+        if (ch$Q1 == 0) "no species turned up in just one interval" else "just one species turned up in a single interval"))
+      else p(tags$b("Chao2"), " estimates ", tags$b(sprintf("%.0f", ch$chao2)), " species use the site (95% CI ", tags$b(ci_txt), "; Chao 1987), so roughly ", tags$b(sprintf("%.0f", uncaught)), " remain uncaught."),
       if (ch$unstable) p(class="pop-caveat", bsicons::bs_icon("exclamation-triangle"),
-        sprintf(" Only %d species were caught at exactly two occasions (Q2=%d), so this point estimate is volatile. Read the CI and the coverage, not the single number.", ch$Q2, ch$Q2)))
+        sprintf(" %s %s caught at exactly two occasions (Q2 = %d), so this point estimate is volatile. Read the range and the coverage, not the single number.",
+          sub("^only", "Only", sub("^no", "No", q2_phrase(ch$Q2))), if (ch$Q2 == 1) "was" else "were", ch$Q2)))
     if (ch$unstable && is.finite(cov))
-      insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. Sample <b>coverage is %.0f%%</b>, so most species present were caught. A Chao2 extrapolation is unstable here (only %d caught twice). ", ch$S_obs, ch$m, round(100 * cov), ch$Q2)), chao_pop)
+      insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. Sample coverage is <b>%.0f%%</b>: almost every trap record belongs to a species already found, so the ones still missing are rare in these traps. Chao2 puts the total at <b>%s</b>, a wide range because %s turned up exactly twice. ", ch$S_obs, ch$m, round(100 * cov), ci_txt, q2_phrase(ch$Q2))), chao_pop)
+    else if (uncaught == 0)
+      insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. <b>Chao2</b> finds no sign of species the traps are missing.",
+        ch$S_obs, ch$m)), chao_pop)
     else
       insight_banner("calculator", tone="gold", HTML(sprintf("Caught <b>%d</b> species across %d sampled intervals. <b>Chao2</b> estimates <span class='ci-hero'>%.0f</span> use the site (95%% CI %s). Roughly <b>%.0f</b> remain uncaught.",
-        ch$S_obs, ch$m, ch$chao2, ci_txt, max(0, round(ch$chao2 - ch$S_obs)))), chao_pop)
+        ch$S_obs, ch$m, ch$chao2, ci_txt, uncaught)), chao_pop)
   })
 
   # ---- Swarm Board (flagship) ----
@@ -380,17 +500,17 @@ server <- function(input, output, session) {
     if (is.null(brd) || !nrow(brd)) return(note_plot("No species to place: valid sampled intervals had no eligible target catch", "○"))
     brd$reliable <- brd$n_occ_present >= 3
     brd$col <- genus_col(brd$genus); brd$col[!brd$reliable] <- "rgba(138,135,160,0.35)"
-    brd$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b><em>", brd$scientificName, "</em></b><br/>",
-      "<em>genus ", brd$genus, "</em><br/>",
+    brd$tip <- paste0("<span class='smt-pin-emoji'>\U0001F99F</span> <b><em>", htmltools::htmlEscape(brd$scientificName), "</em></b><br/>",
+      "<em>genus ", htmltools::htmlEscape(brd$genus), "</em><br/>",
       "<span class='smt-pin-stats'>", brd$index, " / 24 trap-hours · in ", brd$ubiquity, "% of sampled intervals<br/>",
       ifelse(is.na(brd$female_share), "sex not recorded", paste0(brd$female_share, "% female")), " · ", round(brd$total), " caught</span>",
       ifelse(brd$reliable, "", "<br/><span class='smt-pin-rar' style='color:#ffd9a7'>⚠ few nights</span>"),
-      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", brd$scientificName, "'>\U0001F9EC Open species profile &rarr;</span>",
+      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", htmltools::htmlEscape(brd$scientificName, attribute = TRUE), "'>\U0001F9EC Open species profile &rarr;</span>",
       "<br/><em class='smt-pin-hint'>Tap the dot to pin this card</em>")
     qcol <- if (is_dark()) "#a99fce" else "#7e72a8"; muted <- if (is_dark()) "#9b91c0" else "#6f6790"
     p <- plot_ly()
     for (g in unique(brd$genus)) { sub <- brd[brd$genus %in% g, ]
-      p <- p %>% add_trace(data=sub, x=~ubiquity, y=~index, type="scatter", mode="markers", name=g %||% "—",
+      p <- p %>% add_trace(data=sub, x=~ubiquity, y=~index, type="scatter", mode="markers", name=g %||% "other",
         customdata=~tip, marker=list(color=sub$col, size=12, opacity=0.82, line=list(color="#fff", width=0.5)),
         text=~scientificName, hovertemplate="<b>%{text}</b><br>%{x}% of sampled intervals · %{y:.2f}/24 trap-hours<extra></extra>") }
     mx <- stats::median(brd$ubiquity); my <- stats::median(brd$index[brd$reliable])
@@ -422,11 +542,23 @@ server <- function(input, output, session) {
 
   # ---- Taxon Profile (downloadable card + QC flags) ----
   output$yearPlot <- renderPlotly({
-    sci <- rv$sp; req(sci); my <- catch_by_year(rv$obs, sci); if (is.null(my) || !nrow(my)) return(note_plot("No yearly data"))
+    sci <- rv$sp; req(sci); my <- catch_by_year(rv$obs, sci, rv$effw, rv$effort); if (is.null(my) || !nrow(my)) return(note_plot("No yearly data"))
     bar_col <- genus_col((rv$board$genus[rv$board$scientificName == sci])[1] %||% "other")
-    plot_ly(my, x=~year, y=~mosquitoes, type="bar", marker=list(color=bar_col),
-            hovertemplate="%{x}<br>%{y} caught (est.)<extra></extra>") %>%
-      plotly_theme(legend=FALSE) %>% plotly::layout(xaxis=list(title="Year", dtick=1, tickformat="d"), yaxis=list(title="Mosquitoes (est.)"), margin=list(l=46,r=10,t=10,b=40))
+    if (isTRUE(my$raw[1])) return(plot_ly(my, x=~year, y=~mosquitoes, type="bar", marker=list(color=bar_col),
+            hovertemplate="%{x}<br>%{y} caught (est., raw)<extra></extra>") %>%
+      plotly_theme(legend=FALSE) %>% plotly::layout(xaxis=list(title="Year", dtick=1, tickformat="d"), yaxis=list(title="Mosquitoes caught (raw)"), margin=list(l=46,r=10,t=10,b=40)))
+    my$col <- ifelse(my$partial, "rgba(138,135,160,0.45)", bar_col)
+    my$tip <- sprintf("%d: %.2f per 24 trap-hours<br>%s caught over %s effort units (%d weeks)%s", my$year, my$index,
+      fmt_int(my$mosquitoes), fmt_int(my$effort_days), my$weeks, ifelse(my$partial, "<br>part season", ""))
+    shp <- list()
+    if (any(my$year < 2018) && any(my$year >= 2018))
+      shp[[length(shp) + 1L]] <- list(type="line", xref="x", yref="paper", x0=2017.5, x1=2017.5, y0=0, y1=1, line=list(color="#8a87a0", dash="dash", width=1))
+    if (any(my$year >= 2024) && any(my$year < 2024))
+      shp[[length(shp) + 1L]] <- list(type="line", xref="x", yref="paper", x0=2023.5, x1=2023.5, y0=0, y1=1, line=list(color="#8a87a0", dash="dot", width=1))
+    plot_ly(my, x=~year, y=~index, type="bar", marker=list(color=my$col), text=~tip, textposition="none",
+            hovertemplate="%{text}<extra></extra>") %>%
+      plotly_theme(legend=FALSE) %>% plotly::layout(shapes=shp, xaxis=list(title="Year", dtick=1, tickformat="d"),
+        yaxis=list(title="Mosquitoes / 24 trap-hours", rangemode="tozero"), margin=list(l=46,r=10,t=10,b=40))
   })
   output$sexPlot <- renderPlotly({
     sci <- rv$sp; req(sci); sx <- sex_split(rv$obs, sci); if (is.null(sx) || !sum(sx$count)) return(note_plot("No sex data"))
@@ -467,11 +599,11 @@ server <- function(input, output, session) {
         div(class="qc-head-badges", glow_badge(paste0(round(r$total), " caught"), DDL$sky))),
       div(class="qc-tiles",
         tile(r$index, "per 24 trap-hours"), tile(paste0(r$ubiquity,"%"), "of sampled intervals"),
-        tile(ifelse(is.na(r$female_share), "—", paste0(r$female_share,"%")), "female"),
+        tile(ifelse(is.na(r$female_share), "n/a", paste0(r$female_share,"%")), "female"),
         tile(r$n_traps, "traps"), tile(r$detections, "records"), tile(r$genus, "genus")),
       div(class="qc-section-h", bs_icon("gender-female"), " Sex split (CO2 traps select females)"),
       plotlyOutput("sexPlot", height="150px"),
-      div(class="qc-section-h", bs_icon("calendar3"), " Mosquitoes caught, by year"),
+      div(class="qc-section-h", bs_icon("calendar3"), " Catch per 24 trap-hours, by year"),
       plotlyOutput("yearPlot", height="150px"),
       qc_block,
       p(class="qc-cap-note", style="margin-top:8px", bs_icon("info-circle"),
@@ -520,10 +652,10 @@ server <- function(input, output, session) {
       out <- cbind(site = rv$site %||% NA_character_, d[, keep, drop=FALSE])
       utils::write.csv(out, file, row.names=FALSE, na="") },
     contentType="text/csv")
-  output$codebookCsv <- downloadHandler(
-    filename = function() sprintf("NEON-Mosquito_codebook_%s.csv", format(Sys.Date(),"%Y%m%d")),
-    content = function(file) utils::write.csv(mos_codebook(), file, row.names=FALSE, na=""),
-    contentType="text/csv")
+  codebook_name <- function() sprintf("NEON-Mosquito_codebook_%s.csv", format(Sys.Date(),"%Y%m%d"))
+  codebook_write <- function(file) utils::write.csv(mos_codebook(), file, row.names=FALSE, na="")
+  output$codebookCsv <- downloadHandler(filename = codebook_name, content = codebook_write, contentType="text/csv")
+  output$codebookCsvAbout <- downloadHandler(filename = codebook_name, content = codebook_write, contentType="text/csv")
 
   # ---- Map (trap grids) ----
   output$map <- leaflet::renderLeaflet({
@@ -537,7 +669,7 @@ server <- function(input, output, session) {
     leaflet::leaflet(g) %>% add_suite_basemap(input$view %||% "Esri.WorldTopoMap") %>%
       leaflet::addCircleMarkers(lng=~lng, lat=~lat, radius=~radius, fillColor=pal(val), color="#2a2342", weight=1.5, fillOpacity=0.9,
         layerId=~plotID,
-        label=~lapply(sprintf("<div style='font-family:system-ui,sans-serif'><b>%s</b> · %d species · %s / 24 trap-hours<br><span style='color:#7c52e0;font-weight:700'>\U0001F446 click for the species list</span></div>", short_point(plotID), richness, ifelse(is.na(per_24h),"—",per_24h)), htmltools::HTML)) %>%
+        label=~lapply(sprintf("<div style='font-family:system-ui,sans-serif'><b>%s</b> · %d species · %s / 24 trap-hours<br><span style='color:#7c52e0;font-weight:700'>\U0001F446 click for the species list</span></div>", short_point(plotID), richness, ifelse(is.na(per_24h),"n/a",per_24h)), htmltools::HTML)) %>%
       leaflet::addLegend("bottomright", pal=pal, values=val, title=if (metric=="richness") "species" else "per 24 trap-hours", opacity=0.9)
   })
   observeEvent(input$map_marker_click, { id <- input$map_marker_click$id; if (!is.null(id)) rv$grid <- id })
@@ -582,12 +714,17 @@ server <- function(input, output, session) {
     }
     d$biome <- biome_of(d$site); d$bcol <- biome_col(d$biome); d$blab <- unname(BIOME_LAB[d$biome])
     d$taxa <- suppressWarnings(as.numeric(d$taxa)); d$taxa[is.na(d$taxa)] <- 0
-    rr <- range(d$taxa, na.rm = TRUE); d$rad <- 6 + 11 * (d$taxa - rr[1]) / max(1, diff(rr))
-    pop <- sprintf("<div style='font-family:system-ui,sans-serif;min-width:170px'><b>%s · %s</b><br><span style='color:#6f6790'>%s · %s</span><br><b>%s</b> species · <b>%s</b> / 24 trap-hours<br><a href='#' style='color:#7c52e0;font-weight:700' onclick=\"smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;\">\U0001F99F Explore this site &rarr;</a></div>",
-                   d$site, d$name, d$blab, d$state, d$taxa, d$mos_per_24h %||% "—", gsub("'", "", d$name), d$site)
+    rr <- range(d$taxa, na.rm = TRUE); d$rad <- 9 + 10 * (d$taxa - rr[1]) / max(1, diff(rr))
+    e <- function(x) htmltools::htmlEscape(x); ea <- function(x) htmltools::htmlEscape(x, attribute = TRUE)
+    js_load <- vapply(seq_len(nrow(d)), function(i) ea(sprintf("smtLoadStart(%s);Shiny.setInputValue('pickSite',%s,{priority:'event'});return false;",
+      js_str(paste0(d$name[i], " · loading…")), js_str(d$site[i]))), character(1))
+    js_info <- vapply(d$site, function(x) ea(sprintf("Shiny.setInputValue('siteInfo',%s,{priority:'event'});return false;", js_str(x))), character(1))
+    pop <- sprintf("<div style='font-family:system-ui,sans-serif;min-width:170px'><b>%s · %s</b><br><span style='color:#6f6790'>%s · %s</span><br><b>%s</b> species · <b>%s</b> / 24 trap-hours<br><a href='#' style='color:#7c52e0;font-weight:700' onclick=\"%s\">\U0001F99F Explore this site &rarr;</a><br><a href='#' style='color:#6f6790' onclick=\"%s\">About this site</a></div>",
+                   e(d$site), e(d$name), e(d$blab), e(d$state), d$taxa, e(as.character(d$mos_per_24h %||% "n/a")), js_load, js_info)
     leaflet::leaflet(d) %>% add_suite_basemap("CartoDB.Positron") %>% leaflet::setView(-96, 41, 3) %>%
       leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~rad, fillColor = ~bcol, color = "#fff", weight = 1, fillOpacity = 0.85,
-        label = ~lapply(sprintf("<b>%s</b> · %s<br>%s · %s species", site, name, blab, taxa), htmltools::HTML), popup = pop) %>%
+        label = ~lapply(sprintf("<b>%s</b> · %s<br>%s · %s species", htmltools::htmlEscape(site), htmltools::htmlEscape(name), blab, taxa), htmltools::HTML),
+        popup = pop, popupOptions = leaflet::popupOptions(maxWidth = 300, minWidth = 230, autoPan = TRUE, keepInView = FALSE, closeOnClick = FALSE)) %>%
       leaflet::addLegend("bottomright", colors = unname(BIOME_COL), labels = unname(BIOME_LAB), title = "Biome", opacity = 0.9)
   })
 
@@ -663,15 +800,25 @@ server <- function(input, output, session) {
       keep <- intersect(c("site","name","state","biome_lab","warm_temp_c","mat_c","monsoon_precip_mm","precip_annual_mm","has_gauge",
                           "effort_days","collections","taxa","mos_per_24h","S_obs","S_rare","t_used","coverage","hill_q1","hill_q2","mean_ubiquity","pct_culex","top_taxon","top_genus"), names(g))
       out <- g[, keep, drop = FALSE]
-      if (isTRUE(ANY_SYNTHETIC)) out$DATA_NOTE <- "SYNTHETIC PLACEHOLDER — not measurements"
+      if (isTRUE(ANY_SYNTHETIC)) out$DATA_NOTE <- "SYNTHETIC PLACEHOLDER: not measurements"
       utils::write.csv(out, file, row.names = FALSE, na = "") },
     contentType = "text/csv")
 
-  # ---- Site report card (top-bar "report" download) -------------------------
-  # The v2 flow requires a Report on every app. This emits a tidy one-row-per-
-  # metric site summary CSV — the same headline numbers the hero band, the
-  # insights, and the Chao2 banner are built from, so the export reproduces what
-  # the screen says. (No PDF path exists in this app; a well-formed CSV stands in.)
+  # ---- Site report (hero "report (PDF)" and "summary (CSV)") ----------------
+  # The PDF is a one-page base-graphics report (R/mos_report_pdf.R); the CSV is a
+  # tidy one-row-per-metric summary of the same headline numbers the hero band,
+  # the insights and the Chao2 banner are built from.
+  output$reportPdf <- downloadHandler(
+    filename = function() sprintf("NEON-Mosquito_site-report_%s_%s.pdf", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      req(!is.null(rv$obs))
+      sv <- site_vectors(rv$obs, rv$nocc, rv$tn, rv$effw, if (!is.null(rv$traps)) nrow(rv$traps) else NA)
+      pk <- pulse_peak(pulse_phenology(rv$obs, rv$effw), rv$obs)
+      note <- if (is.finite(sv$top_share %||% NA) && sv$top_share >= 25) top_record_note(sv) else NULL
+      build_mos_report_pdf(file, rv$label %||% rv$site, sv, rv$board, pk, rv$meta %||% list(),
+                           coarse_share = sv$coarse_share, top_note = note)
+    },
+    contentType = "application/pdf")
   output$reportCsv <- downloadHandler(
     filename = function() sprintf("NEON-Mosquito_site-report_%s_%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
@@ -680,9 +827,9 @@ server <- function(input, output, session) {
       ch <- chao2_collections(rv$obs, rv$nocc)
       gs <- genus_share(rv$obs)
       yrs <- suppressWarnings(range(rv$obs$year, na.rm = TRUE))
-      yr_lab <- if (all(is.finite(yrs))) { if (yrs[1] == yrs[2]) as.character(yrs[1]) else sprintf("%d–%d", yrs[1], yrs[2]) } else NA_character_
-      pk <- pulse_phenology(rv$obs, rv$effw)
-      peak_wk <- if (!is.null(pk) && nrow(pk)) pk$week[which.max(pk$index)] else NA_integer_
+      yr_lab <- if (all(is.finite(yrs))) { if (yrs[1] == yrs[2]) as.character(yrs[1]) else sprintf("%d to %d", yrs[1], yrs[2]) } else NA_character_
+      pkk <- pulse_peak(pulse_phenology(rv$obs, rv$effw), rv$obs)
+      mt <- rv$meta %||% list()
       m <- function(metric, value, note = "") data.frame(metric = metric, value = as.character(value), note = note, stringsAsFactors = FALSE)
       rows <- list(
         m("site", rv$site %||% NA, "NEON site code"),
@@ -691,15 +838,22 @@ server <- function(input, output, session) {
         m("species_caught", if (!is.null(sv)) sv$n_taxa else NA, "distinct species in CO2-trap catch"),
         m("activity_index_per_24_trap_hours", if (!is.null(sv)) sv$index else NA, "within-site activity index, not a population"),
         m("pct_female", if (!is.null(sv)) sv$pct_female else NA, "share of sexed catch that was female (CO2 traps select females)"),
-        m("culex_share_pct", if (!is.null(sv)) sv$culex_share else NA, "Culex share of catch — activity only, not infection or risk"),
-        m("effort_days", if (!is.null(sv)) sv$effort_days else NA, "total valid effort (trapHours / 24)"),
-        m("collections", if (!is.null(sv)) sv$n_collections else NA, "valid day/night sampling intervals"),
+        m("culex_share_pct", if (!is.null(sv)) sv$culex_share else NA, "Culex share of catch, activity only, not infection or risk"),
+        m("coarse_id_share_pct", if (!is.null(sv) && is.finite(sv$coarse_share)) round(100 * sv$coarse_share) else NA, "share of catch identified only to genus or family"),
+        m("top_collection_share_pct", if (!is.null(sv)) sv$top_share else NA, "share of catch from the single largest collection record"),
+        m("effort_days", if (!is.null(sv)) sv$effort_days else NA, "resolved effort (trapHours / 24) over intervals with a known catch; the index denominator"),
+        m("sampled_effort_days", mt$valid_effort_days %||% NA, "all sampled effort, including intervals whose catch is pending or unknown"),
+        m("collections", if (!is.null(sv)) sv$n_collections else NA, "sampled day/night intervals with a known catch"),
+        m("intervals_catch_unknown", mt$n_unavailable_outcome %||% NA, "sampled intervals whose catch is pending, held or unknown; left out of rates"),
         m("most_active_species", if (!is.null(sv)) sv$top else NA, ""),
-        m("peak_activity_week", peak_wk, "ISO week of the year of peak activity"),
+        m("peak_activity_week", pkk$week, "week of the year (Sunday start, R %U) of peak median activity, among weeks trapped in at least half as many years as the best-covered week (3 or more where possible)"),
+        m("peak_activity_week_n_years", pkk$n_years, sprintf("years the peak week was trapped, of %s years with trapping at the site", pkk$years_total %||% NA)),
+        m("release", mt$release %||% MOS_RELEASE$release, paste0("NEON ", MOS_RELEASE$product, ", doi:", MOS_RELEASE$doi, ", CC BY 4.0")),
+        m("data_through", mt$data_through %||% NA, "last sampled collection date in the bundle"),
         m("top_genus", if (!is.null(gs) && nrow(gs)) sprintf("%s (%.0f%%)", gs$genus[1], gs$share[1]) else NA, ""),
         if (!is.null(ch)) m("chao2_estimated_richness", round(ch$chao2), sprintf("incidence-based minimum estimate (S_obs=%d)", ch$S_obs)) else NULL)
       out <- do.call(rbind, Filter(Negate(is.null), rows))
-      if (isTRUE(ANY_SYNTHETIC)) out <- rbind(out, m("DATA_NOTE", "SYNTHETIC PLACEHOLDER", "preview build — not measurements"))
+      if (isTRUE(ANY_SYNTHETIC)) out <- rbind(out, m("DATA_NOTE", "SYNTHETIC PLACEHOLDER", "preview build, not measurements"))
       utils::write.csv(out, file, row.names = FALSE, na = "") },
     contentType = "text/csv")
 
@@ -709,12 +863,13 @@ server <- function(input, output, session) {
       div(class="about-card", h4("\U0001F99F What this is"),
         p("An (unofficial) explorer for NEON's ", tags$b("Mosquitoes sampled from CO2 traps"), " (", tags$code("DP1.10043.001"), "). A CO2 trap releases carbon dioxide, the gas animals breathe out, and host-seeking female mosquitoes fly toward it. NEON sorts, weighs, and identifies the catch.")),
       div(class="about-card", h4(bs_icon("activity"), " Activity index, not population"),
-        p("A CO₂ trap measures host-seeking ", tags$b("activity"), ", not a headcount. Eligible subsampled catches are scaled by ", tags$b("1 / proportionIdentified"), " and divided by valid effort in ", tags$b("24-hour units"), ". Invalid proportions are held. The result is a ", tags$b("within-site index"), ", never a population."),
+        p("A CO₂ trap measures host-seeking ", tags$b("activity"), ", not a headcount. Eligible subsampled catches are scaled by ", tags$b("1 / proportionIdentified"), " and divided by sampled effort in ", tags$b("24-hour units"), ". Intervals whose catch is still pending or unknown are left out of that effort rather than counted as zero, and invalid proportions are held. The result is a ", tags$b("within-site index"), ", never a population."),
+        p("Two NEON method changes run through the multi-year views: from 2018 each trapping bout has one night instead of two, and from 2024 the traps are baited with CO₂ canisters instead of dry ice (PUUM from mid-2022). The yearly chart marks both."),
         p("Almost every mosquito in the catch is ", tags$b("female"), ", because host-seeking females respond to the CO₂ plume. Read the sex split as a method signature: a near-all-female catch is expected for this trap design.")),
       div(class="about-card", h4(bs_icon("calculator"), " How many species?"),
         p(tags$b("Chao2"), " (incidence-based) estimates how many species use the site beyond those caught. The sampling unit is a ", tags$b("collection occasion"), " (one sampled interval), so revisits aren't double-counted. CO2 traps miss day-active and rare mosquitoes.")),
       div(class="about-card", h4(bs_icon("globe-americas"), " Across the continent"),
-        p("NEON's RELEASE-2026 roster contains ", tags$b("47 terrestrial sites"), ". The ", tags$b("Across the continent"), " tab places climate-supported sites by warm-season conditions against their mosquito communities. PUUM remains available throughout the mosquito explorer but is held from this climate overlay until an equivalent pinned environmental bundle is available."),
+        p(sprintf("NEON's %s roster contains ", MOS_RELEASE$release), tags$b(sprintf("%d terrestrial sites", nrow(site_table))), ". The ", tags$b("Across the continent"), " tab places climate-supported sites by warm-season conditions against their mosquito communities. PUUM remains available throughout the mosquito explorer but is held from this climate overlay until an equivalent pinned environmental bundle is available."),
         p("Richness is ", tags$b("rarefied to a common number of sampled intervals"), " (Colwell et al. 2012). It is a ", tags$b("space-for-time"), " comparison, 47 places at once, not one place warming, so it is correlational, confounded by biome and latitude. Activity is a within-site index, so sites are compared by direction, never by who has the higher raw catch.")),
       div(class="about-card", h4(bs_icon("shield-exclamation"), " The vector angle"),
         p("Some ", tags$b("Culex"), " species are important West Nile virus vectors, but this explorer uses the mosquito catch product only. It does ", tags$b("not"), " test for a virus or estimate transmission, exposure, or health risk.")),
@@ -723,6 +878,16 @@ server <- function(input, output, session) {
           "Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle. NEON data are provided under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (",
           tags$a(href="https://creativecommons.org/licenses/by/4.0/", target="_blank", "creativecommons.org/licenses/by/4.0"),
           "). This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.")),
+      div(class="about-card", h4(bs_icon("book"), " Column codebook"),
+        p("Every column in the CSV downloads, with units and how it was computed."),
+        downloadButton("codebookCsvAbout", tagList(bs_icon("book"), " Column codebook (CSV)"), class = "smt-clear-btn")),
+      div(class="about-card", h4(bs_icon("diagram-3"), " The NEON explorer suite"),
+        p(sprintf("%s apps on NEON data, one per product, plus the ", number_word(sum(SUITE_APPS$key != "atlas"))), tags$a(href = ATLAS_COVER_URL, "NEON Cross-Product Response Atlas"), " that lines them up."),
+        tags$ul(class = "suite-list", lapply(seq_len(nrow(SUITE_APPS)), function(i) {
+          a <- SUITE_APPS[i, ]
+          tags$li(if (a$key == "mosquito") tags$b(a$name, " (this app)") else tags$a(href = a$app_url, a$name),
+            tags$span(class = "suite-dpid", sprintf(" · %s · ", a$dpid)), tags$a(href = a$cover_url, "cover"))
+        }))),
       div(class="about-card", h4(bs_icon("envelope"), " Desert Data Labs"),
         p(bs_icon("envelope"), " ", tags$a(href="mailto:desertdatalabs@gmail.com","desertdatalabs@gmail.com"), " · ",
           tags$a(href="https://data.neonscience.org/data-products/DP1.10043.001", target="_blank", "NEON data product"))))

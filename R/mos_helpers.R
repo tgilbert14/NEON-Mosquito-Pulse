@@ -73,11 +73,24 @@ site_vectors <- function(obs, n_occ = NULL, trap_nights = NULL, effort_week = NU
   mal <- if (nrow(all_target)) sum(all_target$.cnt[toupper(substr(all_target$sex, 1, 1)) == "M"], na.rm = TRUE) else 0
   culex <- if (nrow(all_target)) sum(all_target$.cnt[all_target$genus == "Culex"], na.rm = TRUE) else 0
   tot <- sum(all_target$.cnt, na.rm = TRUE)
-  pk <- pulse_phenology(obs, effort_week); peak_wk <- if (!is.null(pk) && nrow(pk)) pk$week[which.max(pk$index)] else NA_integer_
+  # One collection can dominate a site's whole-trap total when a small sorted
+  # subsample is expanded by 1/proportionIdentified; report its share so the
+  # hero can say so.
+  top_i <- if (nrow(all_target) && any(is.finite(all_target$.cnt))) which.max(all_target$.cnt) else integer(0)
+  top_cnt <- if (length(top_i)) all_target$.cnt[top_i] else 0
+  sp_tot <- { s <- species_level_only(all_target); if (is.null(s) || !nrow(s)) 0 else sum(s$.cnt, na.rm = TRUE) }
+  pk <- pulse_phenology(obs, effort_week); peak <- pulse_peak(pk, obs)
   list(n_taxa = if (is.null(brd)) 0L else nrow(brd), index = round(tot / tn, 2),
+       top_share = if (tot > 0) round(100 * top_cnt / tot) else NA_real_,
+       index_excl_top = round((tot - top_cnt) / tn, 2),
+       top_sample = if (length(top_i)) as.character(all_target$sampleID[top_i]) else NA_character_,
+       top_date = if (length(top_i) && "collectDate" %in% names(all_target)) as.Date(all_target$collectDate[top_i]) else as.Date(NA),
+       top_taxon = if (length(top_i)) as.character(all_target$scientificName[top_i]) else NA_character_,
+       coarse_share = if (tot > 0) 1 - sp_tot / tot else NA_real_,
        pct_female = if (fem + mal > 0) round(100 * fem / (fem + mal)) else NA_real_,
        culex_share = if (tot > 0) round(100 * culex / tot) else NA_real_,
-       peak_week = peak_wk, n_traps = n_traps,
+       peak_week = peak$week, peak_n_years = peak$n_years, peak_years_total = peak$years_total,
+       peak_month = peak$month_label, n_traps = n_traps,
        effort_days = round(tn, 2), n_collections = as.integer(n_occ %||% dplyr::n_distinct(obs$sampleID)),
        top = if (is.null(brd)) "No mosquitoes detected" else brd$vernacular[which.max(brd$index)] %||% brd$scientificName[which.max(brd$index)])
 }
@@ -92,7 +105,7 @@ site_vectors <- function(obs, n_occ = NULL, trap_nights = NULL, effort_week = NU
 # no trapping at all are absent (a gap), never a zero. The app's signature chart.
 # ---------------------------------------------------------------------------
 week_of <- function(d) as.integer(format(as.Date(substr(as.character(d), 1, 10)), "%U"))
-pulse_phenology <- function(obs, effort_week = NULL) {
+pulse_phenology <- function(obs, effort_week = NULL, era = NULL) {
   sp <- target_only(obs)
   catch <- data.frame(year = integer(0), week = integer(0), total = numeric(0), n_occ = integer(0))
   if (!is.null(sp) && nrow(sp)) {
@@ -113,13 +126,62 @@ pulse_phenology <- function(obs, effort_week = NULL) {
   # Across years per week: the MEDIAN, not the mean. Mosquito catch is wildly
   # skewed and outlier-prone (one fluke year can be 1000x a normal week), so a
   # mean lets a single freak January collection masquerade as the seasonal peak.
-  # The median gives the typical year's pulse (standard in mosquito surveillance);
-  # the band is the inter-quartile spread, so noisy weeks read as noisy.
-  yw %>% dplyr::group_by(.data$week) %>%
+  # The median gives the typical year's pulse (standard in mosquito surveillance).
+  # The band is the 25th to 75th percentile across years, so it never dips
+  # below zero and it is the "middle 50% of years" the chart says it is.
+  if (!is.null(era)) yw <- yw[yw$year %in% era, , drop = FALSE]
+  if (!nrow(yw)) return(NULL)
+  out <- yw %>% dplyr::group_by(.data$week) %>%
     dplyr::summarise(index = stats::median(.data$idx),
-                     se = if (dplyr::n() > 1) stats::IQR(.data$idx) / 2 else 0,
+                     q25 = stats::quantile(.data$idx, 0.25, names = FALSE),
+                     q75 = stats::quantile(.data$idx, 0.75, names = FALSE),
                      n_years = dplyr::n(), .groups = "drop") %>%
     dplyr::arrange(.data$week)
+  # Years with any trapping at the site. NEON bouts are biweekly, so a single
+  # week of the year is trapped in only about half of them.
+  attr(out, "years_trapped") <- dplyr::n_distinct(yw$year)
+  out
+}
+
+# The seasonal peak, gated on how many years support each week: a week trapped
+# in one year keeps its raw single-year value while multi-year weeks are pulled
+# to the median, so an ungated which.max lets one spike win. A week must be
+# trapped in at least half as many years as the best-supported week, and in at
+# least 3 years where any week has 3, so the median is a real median. If no
+# week clears the bar the bar drops one year at a time, and the result always
+# reports the support the chosen week has (n_years) and the years the site
+# was trapped at all (years_total).
+pulse_peak <- function(pk, obs = NULL) {
+  none <- list(week = NA_integer_, n_years = NA_integer_, years_total = NA_integer_, month_label = NA_character_)
+  if (is.null(pk) || !nrow(pk) || !any(pk$index > 0, na.rm = TRUE)) return(none)
+  best <- max(pk$n_years)
+  Y <- as.integer(attr(pk, "years_trapped") %||% best)
+  need <- if (best >= 3) max(3L, as.integer(ceiling(best / 2))) else as.integer(best)
+  ok <- pk[0, , drop = FALSE]
+  while (!nrow(ok) && need >= 1L) {
+    ok <- pk[pk$n_years >= need & pk$index > 0, , drop = FALSE]
+    need <- need - 1L
+  }
+  i <- which.max(ok$index); w <- ok$week[i]
+  month <- NA_character_
+  if (!is.null(obs) && nrow(obs) && all(c("week", "collectDate") %in% names(obs))) {
+    d <- as.Date(obs$collectDate[obs$week %in% w])
+    if (length(d) && any(!is.na(d))) month <- month.name[as.integer(format(stats::median(d, na.rm = TRUE), "%m"))]
+  }
+  if (is.na(month)) month <- month.name[as.integer(format(as.Date("2021-01-03") + 7 * max(0L, w), "%m"))]
+  list(week = as.integer(w), n_years = as.integer(ok$n_years[i]), years_total = Y, month_label = month)
+}
+
+# Plain-text clause naming what the peak week rests on, shared by the Pulse
+# headline, the report PDF and the summary CSV.
+peak_support_text <- function(peak) {
+  ny <- suppressWarnings(as.integer(peak$n_years %||% NA)); yt <- suppressWarnings(as.integer(peak$years_total %||% NA))
+  if (is.na(ny)) return("")
+  if (isTRUE(yt == 1L)) return("in the one season trapped here")
+  base <- if (ny >= 3L) sprintf("the median of the %d years that week was trapped", ny)
+    else if (ny == 2L) "the average of the 2 years that week was trapped"
+    else "from the one year that week was trapped"
+  if (!is.na(yt)) sprintf("%s (of %d years with trapping)", base, yt) else base
 }
 
 # genus composition (shares of whole-trap catch)
@@ -156,7 +218,8 @@ chao2_collections <- function(obs, n_occ = NULL) {
   inc <- as.numeric(inc); S <- length(inc); Q1 <- sum(inc == 1); Q2 <- sum(inc == 2)
   if (S == 0 || m < 2) return(NULL)
   corr <- (m - 1) / m
-  chao <- if (Q2 > 0) S + corr * Q1^2 / (2 * Q2) else S + corr * Q1 * (Q1 - 1) / 2
+  # Bias-corrected Chao2 for every Q2, matching the (Q2 + 1) variance below.
+  chao <- S + corr * Q1 * (Q1 - 1) / (2 * (Q2 + 1))
   f0 <- max(0, chao - S)
   var_f0 <- if (Q2 > 0)
     corr * (Q1 * (Q1 - 1)) / (2 * (Q2 + 1)) + corr^2 * (Q1 * (2 * Q1 - 1)^2) / (4 * (Q2 + 1)^2) +
@@ -165,7 +228,9 @@ chao2_collections <- function(obs, n_occ = NULL) {
   var_f0 <- max(var_f0, 0); ci_lo <- ci_hi <- NA_real_
   if (f0 > 0 && var_f0 > 0) { K <- exp(1.96 * sqrt(log(1 + var_f0 / f0^2))); ci_lo <- S + f0 / K; ci_hi <- S + f0 * K }
   else if (f0 == 0) { ci_lo <- ci_hi <- S }
-  list(S_obs = S, chao2 = round(chao, 1), m = m, Q1 = Q1, Q2 = Q2, unstable = Q2 < 3,
+  # Volatile only when there are uncaught species to estimate: with Q1 <= 1 the
+  # bias-corrected f0 is 0 and the estimate is simply S.
+  list(S_obs = S, chao2 = round(chao, 1), m = m, Q1 = Q1, Q2 = Q2, unstable = Q2 < 3 && Q1 > 1,
        ci_lo = round(ci_lo, 1), ci_hi = round(ci_hi, 1))
 }
 # species accumulation over collection occasions (deterministic permutation mean).
@@ -175,7 +240,8 @@ chao2_collections <- function(obs, n_occ = NULL) {
 # O(perms*k^2) — ~6s on the biggest real sites; this is ~60-86x faster.)
 mos_accum <- function(obs, effort = NULL, perms = 40) {
   effort_ids <- if (!is.null(effort) && "effort_id" %in% names(effort)) {
-    valid <- if ("valid_effort" %in% names(effort)) effort$valid_effort %in% TRUE else rep(TRUE, nrow(effort))
+    valid <- if ("denominator_ok" %in% names(effort)) effort$denominator_ok %in% TRUE else
+      if ("valid_effort" %in% names(effort)) effort$valid_effort %in% TRUE else rep(TRUE, nrow(effort))
     as.character(effort$effort_id[valid])
   } else character(0)
   sp <- target_only(species_level_only(obs))
@@ -223,10 +289,38 @@ species_detail <- function(obs, sci) {
   d <- obs[obs$scientificName == sci & !is.na(obs$scientificName), , drop = FALSE]
   if (!nrow(d)) return(NULL); d
 }
-catch_by_year <- function(obs, sci) {
-  d <- species_detail(obs, sci); if (is.null(d)) return(NULL)
-  d$.cnt <- num(d$count)
-  d %>% dplyr::group_by(.data$year) %>% dplyr::summarise(mosquitoes = round(sum(.data$.cnt, na.rm = TRUE)), .groups = "drop")
+# Catch per 24 trap-hours by year for one species: every year with effort is
+# kept (a year the species was not caught is a 0, not a gap), the denominator is
+# that year's resolved effort, and years trapped for under half the usual number
+# of weeks are marked partial. Without an effort table it falls back to the raw
+# sum and says so (raw = TRUE).
+catch_by_year <- function(obs, sci, effort_week = NULL, effort = NULL) {
+  d <- species_detail(obs, sci)
+  caught <- if (is.null(d)) data.frame(year = integer(0), mosquitoes = numeric(0)) else {
+    d$.cnt <- num(d$count)
+    d %>% dplyr::group_by(.data$year) %>% dplyr::summarise(mosquitoes = sum(.data$.cnt, na.rm = TRUE), .groups = "drop")
+  }
+  if (is.null(effort_week) || !nrow(effort_week) || !"effort_days" %in% names(effort_week)) {
+    if (!nrow(caught)) return(NULL)
+    caught$mosquitoes <- round(caught$mosquitoes); caught$raw <- TRUE; return(caught)
+  }
+  ew <- effort_week[is.finite(num(effort_week$effort_days)) & num(effort_week$effort_days) > 0, , drop = FALSE]
+  if (!nrow(ew)) return(NULL)
+  yr <- ew %>% dplyr::group_by(.data$year) %>%
+    dplyr::summarise(effort_days = sum(num(.data$effort_days)), weeks = dplyr::n_distinct(.data$week), .groups = "drop")
+  out <- dplyr::left_join(yr, caught, by = "year")
+  out$mosquitoes[is.na(out$mosquitoes)] <- 0
+  out$index <- round(out$mosquitoes / out$effort_days, 2)
+  out$mosquitoes <- round(out$mosquitoes)
+  out$partial <- out$weeks < 0.5 * stats::median(out$weeks)
+  out$era <- NA_character_
+  if (!is.null(effort) && all(c("year", "protocol_era") %in% names(effort))) {
+    v <- effort[effort$valid_effort %in% TRUE, , drop = FALSE]
+    era <- tapply(v$protocol_era, v$year, mode_chr)
+    out$era <- unname(era[as.character(out$year)])
+  }
+  out$raw <- FALSE
+  out[order(out$year), , drop = FALSE]
 }
 
 # every species caught at one grid (plotID) — powers the map click panel + CSV
@@ -241,9 +335,14 @@ grid_species <- function(obs, plotid) {
 }
 # per-grid summary for the map: richness + activity per 24 trap-hours
 point_summary <- function(obs, traps) {
-  sp <- target_only(species_level_only(obs)); sp$.cnt <- num(sp$count)
-  per <- sp %>% dplyr::group_by(.data$plotID) %>%
-    dplyr::summarise(richness = dplyr::n_distinct(.data$scientificName), caught = sum(.data$.cnt, na.rm = TRUE), .groups = "drop")
+  # Catch from every target row (genus-only identifications included, as in the
+  # hero index); richness from species-level rows only.
+  tg <- target_only(obs); tg$.cnt <- num(tg$count)
+  caught <- tg %>% dplyr::group_by(.data$plotID) %>%
+    dplyr::summarise(caught = sum(.data$.cnt, na.rm = TRUE), .groups = "drop")
+  rich <- target_only(species_level_only(obs)) %>% dplyr::group_by(.data$plotID) %>%
+    dplyr::summarise(richness = dplyr::n_distinct(.data$scientificName), .groups = "drop")
+  per <- dplyr::full_join(caught, rich, by = "plotID")
   tv <- traps %>% dplyr::group_by(.data$plotID) %>%
     dplyr::summarise(lat = stats::median(num(.data$lat), na.rm = TRUE), lng = stats::median(num(.data$lng), na.rm = TRUE),
                      effort_days = sum(num(.data$effort_days), na.rm = TRUE), .groups = "drop")
@@ -287,22 +386,19 @@ mos_qc <- function(obs, sci, traps = NULL) {
   iq  <- if ("identificationQualifier" %in% names(d)) trimws(as.character(d$identificationQualifier)) else rep("", nrow(d))
   tgt2<- if ("is_target" %in% names(d)) d$is_target else rep(TRUE, nrow(d))
 
-  # 1 — trapHours missing or zero on a row that has catch (can't normalize -> dropped from denominator)
-  add("high", "Trap-hours missing or zero", "traphours", which((is.na(th) | th == 0) & is.finite(cnt) & cnt > 0),
-      "These collections have catch but no usable trapHours, so they cannot be normalized per 24 trap-hours and are held from the index. A deployment without usable duration is unavailable effort, not a zero catch.")
+  # Unusable trap-hours and bycatch cannot reach a species' rows (the bundle
+  # holds catch from intervals without usable duration, and the expert-ID table
+  # is Culicidae only), so those checks run site-wide in site_qc() instead.
   # 2 — catch present but targetTaxaPresent = N (the data contradicts itself)
   add("high", "Catch present, but 'no target taxa' flagged", "targettaxa", which(tgt %in% "N" & is.finite(cnt) & cnt > 0),
       "The trapping record says no mosquitoes were present, yet identified mosquitoes were counted from it. One of the two is wrong; verify before trusting the count.")
   # 3 — large subsample expansion (a few counted scaled to hundreds = wide uncertainty)
   big <- which(is.finite(ef) & ef > 10)
   add("warn", "Large subsample expansion", "expansion", big,
-      "Estimated count extrapolated from a small sorted subsample (expansion factor > 10x) — treat the abundance as approximate.")
+      "Estimated count extrapolated from a small sorted subsample (expansion factor above 10x), so treat the count as approximate.")
   # 4 — compromised sampleCondition
   add("warn", "Compromised sample condition", "condition", which(!is.na(cond) & nzchar(cond) & !(cond %in% CLEAN_CONDITION)),
       "The sample was logged as damaged, spilled, moldy, or otherwise compromised, so its counts may be undercounts. Worth confirming before trusting them.")
-  # 5 — non-mosquito bycatch leaked into the ID stream
-  add("info", "Non-mosquito bycatch", "bycatch", which(tgt2 %in% FALSE),
-      "Rows flagged as bycatch (non-Culicidae) appear in this species' records. Bycatch is excluded from the activity index and richness, listed here for transparency.")
   # 6 — uncertain identification (excluded from richness, kept in the total index)
   # Count exactly the rows the richness gate drops. nzchar(NA) is TRUE in R, so
   # the qualifier fallback (for bundles without is_species) must test NA first.
@@ -319,6 +415,39 @@ mos_qc <- function(obs, sci, traps = NULL) {
       "Collected on the daytime half of a NEON bout (a bout is one night interval plus the following day interval). Day collections are standard and are counted in the activity index and its denominator, the same as night collections. Listed only so you can see the night/day split.")
   out
 }
+# Site-level data-quality summary over every target row, genus and family rank
+# included, plus the effort and held-identification audit trail that never
+# reaches a species profile. Returns list(rows = data.frame(check, n, detail),
+# held = held_identifications) for the Overview card and its CSV.
+site_qc <- function(obs, effort = NULL, held = NULL, meta = NULL) {
+  tg <- target_only(obs); n_tg <- if (is.null(tg)) 0L else nrow(tg)
+  ef <- if (n_tg && "expansionFactor" %in% names(tg)) num(tg$expansionFactor) else numeric(0)
+  cond <- if (n_tg && "sampleCondition" %in% names(tg)) as.character(tg$sampleCondition) else character(0)
+  coarse <- if (n_tg && "is_species" %in% names(tg)) sum(!(tg$is_species %in% TRUE)) else 0L
+  st <- if (!is.null(effort) && "effort_status" %in% names(effort)) table(factor(effort$effort_status,
+    levels = c("valid_sampled", "not_sampled", "unusable_duration", "unusable_identity"))) else NULL
+  oc <- if (!is.null(effort) && "outcome_status" %in% names(effort)) table(factor(effort$outcome_status[effort$valid_effort %in% TRUE],
+    levels = c("positive_catch", "zero_catch", "catch_unusable_or_pending", "outcome_unknown"))) else NULL
+  hr <- if (!is.null(held) && nrow(held) && "hold_reason" %in% names(held)) table(held$hold_reason) else integer(0)
+  hold_text <- c(held_unmatched_sorting = "no matching sorting record", held_unmatched_effort = "no matching trap interval",
+                 held_invalid_proportion = "unusable subsample proportion", held_invalid_effort = "interval not sampled or unusable",
+                 held_nonpositive_count = "zero or missing count")
+  rows <- data.frame(check = character(0), n = integer(0), detail = character(0), stringsAsFactors = FALSE)
+  add <- function(check, n, detail) rows[nrow(rows) + 1L, ] <<- list(check, as.integer(n), detail)
+  if (!is.null(st)) {
+    add("Intervals sampled", st[["valid_sampled"]], "Day or night trap intervals NEON records as sampled with usable duration.")
+    add("Intervals not sampled", st[["not_sampled"]], "NEON recorded why the trap did not run (snow, flooding, low temperature, logistics, management, weather, other).")
+    add("Intervals without usable trap-hours", st[["unusable_duration"]], "Sampled, but the duration is missing or zero, so the interval is left out of every rate.")
+  }
+  if (!is.null(oc)) add("Sampled intervals with catch still pending or unknown",
+    oc[["catch_unusable_or_pending"]] + oc[["outcome_unknown"]],
+    "Identification is pending, held, or was never reported. These intervals are left out of the rate denominators rather than counted as zero.")
+  add("Records identified only to genus or family", coarse, "Counted in the site index, left out of species richness and the species charts.")
+  add("Records from a large subsample expansion", sum(is.finite(ef) & ef > 10), "The identified count was scaled up more than 10x to the whole trap.")
+  add("Records from a compromised sample", sum(!is.na(cond) & nzchar(cond) & !(cond %in% CLEAN_CONDITION)), "Damaged, spilled or otherwise compromised; counts may be low.")
+  for (k in names(hr)) add(paste0("Identifications held: ", hold_text[[k]] %||% k), hr[[k]], "Kept in the bundle's audit table and left out of every count.")
+  list(rows = rows, held = held)
+}
 mos_qc_report <- function(obs, sci, traps = NULL) {
   q <- mos_qc(obs, sci, traps); if (!length(q$sets)) return(NULL)
   do.call(rbind, c(q$sets, list(make.row.names = FALSE)))
@@ -332,10 +461,12 @@ mos_codebook <- function() {
     column = c("scientificName","vernacularName","genus","sampleID","trapkey","plotID","trapID","year","collectDate",
                "sex","count","is_target","nightOrDay","trapHours","proportionIdentified","expansionFactor",
                "targetTaxaPresent","sampleCondition","identificationQualifier","nativeStatusCode",
-               "index","ubiquity","female_share","effort_days","mos_per_24h","culex_share","S_obs","chao2","coverage","S_rare"),
+               "index","ubiquity","female_share","effort_days","mos_per_24h","culex_share","S_obs","chao2","coverage","S_rare",
+               "coarse_share","top_share","denominator_ok","unavailable_days"),
     units = c("","","","","","","","year","date","F/M/U","# mosquitoes (est.)","logical","night/day","hours","0-1","x",
-              "Y/N","category","qualifier","code","per 24 trap-hours","% of occasions","% of sexed","# sampled intervals",
-              "per 24 trap-hours","% of catch","# species","# species","0-1","# species"),
+              "Y/N","category","qualifier","code","per 24 trap-hours","% of occasions","% of sexed","24-hour units",
+              "per 24 trap-hours","% of catch","# species","# species","0-1","# species",
+              "0-1","% of catch","logical","24-hour units"),
     description = c(
       "Accepted scientific (Latin) name of the mosquito species.",
       "Common name where one exists.",
@@ -360,13 +491,17 @@ mos_codebook <- function() {
       "Activity index = whole-trap-scaled count / (sum trapHours/24). A within-site index of host-seeking activity, NOT a population.",
       "% of collection occasions (sampled intervals) where the species was ever caught. Less catch-biased than the index, still detection-bound.",
       "% of sexed individuals that were female. A CO2-trap method signature (traps select females), not a population sex ratio.",
-      "Effort in 24-hour units = sum(valid trapHours)/24 at the site; the index denominator.",
-      "Site activity index = total whole-trap-scaled catch / (sum valid trapHours/24).",
+      "Resolved effort in 24-hour units = sum(trapHours)/24 over sampled intervals whose catch is known (a catch or NEON's no-target-taxa flag); the index denominator. Intervals with pending or unknown catch are counted separately and left out.",
+      "Site activity index = total whole-trap-scaled catch / resolved effort in 24-hour units.",
       "Culex share of the whole-trap catch; descriptive taxonomy only, with no pathogen or health-risk inference.",
       "Observed species richness (species caught).",
       "Chao2 incidence-based richness estimate (a bias-corrected MINIMUM; unstable when few species are caught at exactly two occasions). Chao 1987.",
-      "Sample-coverage completeness, 0-1 (fraction of the community caught). Chao & Jost 2012.",
-      "Species richness RAREFIED to a common number of collection occasions across sites (incidence rarefaction; Colwell et al. 2012)."),
+      "Incidence sample coverage, 0-1 (share of trap records that belong to species already caught; near 1 means the uncaught species are rare in these traps, not that few species are missing). Chao & Jost 2012.",
+      "Species richness RAREFIED to a common number of collection occasions across sites (incidence rarefaction; Colwell et al. 2012).",
+      "Share of the site's whole-trap catch identified only to genus or family: counted in the site index, left out of species richness and the species charts.",
+      "Share of the site's whole-trap catch from its single largest collection record (one sample can dominate after subsample expansion).",
+      "Effort table: TRUE when a sampled interval's catch is known (target catch, or NEON flagged no target taxa); only these intervals enter rate denominators.",
+      "Effort table: 24-hour units of sampled effort whose catch is pending, held or unknown; disclosed, left out of rates."),
     stringsAsFactors = FALSE)
 
   # Columns that appear ONLY in the per-grid species CSV (map click) and the
@@ -378,7 +513,7 @@ mos_codebook <- function() {
     description = c(
       "Grid CSV: common name where one exists (same as vernacularName; named `vernacular` in the per-grid export).",
       "Grid CSV: number of collection occasions (sampled intervals) at this grid where the species was caught.",
-      "Grid CSV / yearly card: ESTIMATED whole-trap-scaled mosquito count summed for the species (same scaling as `count`)."),
+      "Grid CSV / yearly chart: ESTIMATED whole-trap-scaled mosquito count summed for the species (same scaling as `count`). The yearly chart divides it by that year's resolved effort."),
     stringsAsFactors = FALSE)
 
   cross <- data.frame(
@@ -397,13 +532,13 @@ mos_codebook <- function() {
       "Cross-site CSV: total precipitation in the site's supported summer-rain window, shown as descriptive seasonal context. NA where no gauge.",
       "Cross-site CSV: total annual precipitation.",
       "Cross-site CSV: TRUE if the site has a co-located NEON precipitation gauge; FALSE sites fall back to a climatology and cannot anchor a monsoon window.",
-      "Cross-site CSV: total valid trap effort as sum(trapHours/24).",
+      "Cross-site CSV: resolved trap effort as sum(trapHours/24) over intervals with a known catch.",
       "Cross-site CSV: number of collection occasions (sampled intervals with usable effort) the site's numbers are built on.",
-      "Cross-site CSV: whole-trap-scaled target catch divided by valid 24-hour effort units; a within-site activity index.",
+      "Cross-site CSV: whole-trap-scaled target catch divided by resolved 24-hour effort units; a within-site activity index.",
       "Cross-site CSV: number of mosquito species (taxa) observed at the site.",
       "Cross-site CSV: the common occasion count that S_rare was rarefied DOWN to (the min across compared sites).",
-      "Cross-site CSV: Hill number q=1 (exp Shannon) — effective species count weighting by activity, common species emphasised.",
-      "Cross-site CSV: Hill number q=2 (inverse Simpson) — effective species count, dominant species emphasised.",
+      "Cross-site CSV: Hill number q=1 (exp Shannon): effective species count from incidence frequencies (share of sampled intervals), not catch size.",
+      "Cross-site CSV: Hill number q=2 (inverse Simpson) on incidence frequencies: effective species count, the most frequently caught species emphasised.",
       "Cross-site CSV: mean ubiquity across the site's species (% of occasions present, averaged).",
       "Cross-site CSV: Culex share of the site's whole-trap catch (same as culex_share); no pathogen or health-risk inference.",
       "Cross-site CSV: the most-active species at the site.",
@@ -411,12 +546,13 @@ mos_codebook <- function() {
     stringsAsFactors = FALSE)
 
   pulse <- data.frame(
-    column = c("week","index_median","iqr","n_years","monsoon_month_min","monsoon_month_max"),
-    units  = c("ISO week","per 24 trap-hours","per 24 trap-hours","# years","month","month"),
+    column = c("week","index_median","q25","q75","n_years","monsoon_month_min","monsoon_month_max"),
+    units  = c("week of year, Sunday start (R %U, 00-53)","per 24 trap-hours","per 24 trap-hours","per 24 trap-hours","# years","month","month"),
     description = c(
-      "Pulse CSV: ISO week of the year (0-53).",
+      "Pulse CSV: week of the year counted from Sunday (R format %U, weeks 00-53). Not an ISO 8601 week.",
       "Pulse CSV: median activity index across years for this week (the headline pulse line). Median, not mean, because catch is heavily skewed.",
-      "Pulse CSV: inter-quartile range across years for this week (the shaded band = the middle 50% of years).",
+      "Pulse CSV: 25th percentile of the yearly activity index for this week (lower edge of the shaded band).",
+      "Pulse CSV: 75th percentile of the yearly activity index for this week (upper edge of the shaded band; the band holds the middle 50% of years).",
       "Pulse CSV: number of years contributing a value for this week.",
       "Pulse CSV: first month of the site's summer-monsoon window (NA where the site has no NEON gauge / no summer-rain peak).",
       "Pulse CSV: last month of the site's summer-monsoon window (NA where the site has no NEON gauge / no summer-rain peak)."),

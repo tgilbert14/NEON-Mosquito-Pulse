@@ -1,3 +1,4 @@
+/* adapted from NEON-Breeding-Birds@4805cb5; diverged locally */
 /* =========================================================================
    NEON Small Mammal Tracker — styles.css
    Light "desert field" theme, Desert Data Labs / Girth-Index house style.
@@ -40,7 +41,7 @@
 /* the navy --pine token used as TEXT is unreadable on dark -> light blue */
 [data-bs-theme="dark"] .brand-title,
 [data-bs-theme="dark"] .bio-links-title,
-[data-bs-theme="dark"] .tab-head-text h4,
+[data-bs-theme="dark"] .tab-head-text h2,
 [data-bs-theme="dark"] .hr-indiv-lab,
 [data-bs-theme="dark"] .stat-sub,
 [data-bs-theme="dark"] .tab-intro .bi,
@@ -320,7 +321,7 @@ body {
 /* ---- tab heads -------------------------------------------------------- */
 .main-tabs-wrap { margin-top: 4px; }
 .tab-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 14px; padding: 14px 4px 6px; }
-.tab-head-text h4 { font-weight: 800; color: var(--pine); margin: 0; font-size: 21px; }
+.tab-head-text h2 { font-weight: 800; color: var(--pine); margin: 0; font-size: 21px; }
 .tab-head-text p { color: var(--muted); font-size: 13.5px; font-weight: 450; margin: 4px 0 0; max-width: 660px; line-height: 1.5; }
 .tab-intro { color: var(--muted); font-size: 12.5px; margin: 10px 4px 4px; display: flex; align-items: center; gap: 6px; }
 .tab-intro .bi { color: var(--pine); }
@@ -1009,6 +1010,14 @@ svg.smt-pin-lines {
 .smt-clear-btn { background: transparent; color: var(--pine); border: 1px solid var(--line); }
 .smt-clear-btn:hover { background: var(--bg); }
 .sizelab-hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+/* export status (pincards.js): span.smt-status after the pressed button, or the
+   fixed #smtStatus region when no button is known */
+.smt-status { font-size: 12.5px; font-weight: 600; color: var(--ink); align-self: center; }
+.smt-status:not(:empty) { margin-left: 4px; }
+.smt-status-fixed { position: fixed; right: 16px; bottom: 16px; z-index: 3000; max-width: calc(100vw - 32px);
+  background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 18px var(--shadow); }
+.smt-status-fixed:not(:empty) { padding: 8px 12px; margin: 0; }
+.smt-status-fixed:empty { border: 0; box-shadow: none; }
 
 /* ---- the QC history card (the downloadable per-rodent field record) ----- */
 .qc-card {

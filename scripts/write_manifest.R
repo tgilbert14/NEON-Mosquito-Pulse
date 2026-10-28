@@ -48,6 +48,9 @@ while (length(frontier)) {
 missing_roots <- setdiff(runtime, reachable)
 if (length(missing_roots)) stop("manifest missing runtime roots: ", paste(missing_roots, collapse=", "))
 manifest$packages <- packages[reachable]
+# Deliberate exception to "never reserialise a generated manifest": rewriting
+# manifest.json through jsonlite is safe here because ci.yml's byte gate and
+# verify_bundle.R's manifest checks re-validate the file that ships.
 jsonlite::write_json(manifest, "manifest.json", auto_unbox=TRUE, pretty=TRUE, null="null")
 
 text <- readLines("manifest.json", warn=FALSE)
@@ -61,6 +64,8 @@ for (pkg in names(geo)) if (!is.null(canonical$packages[[pkg]]$description)) {
   canonical$packages[[pkg]]$Source <- "CRAN"
   canonical$packages[[pkg]]$Repository <- "https://cran.r-project.org"
 }
+# Same deliberate exception as above: ci.yml's byte gate and verify_bundle.R
+# re-validate this second write.
 jsonlite::write_json(canonical, "manifest.json", auto_unbox=TRUE, pretty=TRUE, null="null")
 
 check <- jsonlite::fromJSON("manifest.json", simplifyVector=FALSE)
